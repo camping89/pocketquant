@@ -32,7 +32,7 @@
 - `git grep -n "LotTrackingHelper\|_consumed_pnl"` → chỉ còn ở plans/reports lịch sử (chấp nhận), không còn ở `src/` `tests/` `docs/`.
 
 ## Implementation Steps
-1. **Regression parity** — chạy 1 backtest cấu hình cố định (hitnrun2) trước/sau; so `metrics` + `total_trades` + `total_commission` + closing equity. Hoặc thêm golden test nếu chưa có. Ghi lại số vào report.
+1. **Regression parity** — chạy 1 backtest cấu hình cố định trước/sau; so `metrics` + `total_trades` + `total_commission` + closing equity. Hoặc thêm golden test nếu chưa có. Ghi lại số vào report.
 2. **Full gate** — `just test`; nếu đỏ, fix theo recommendation, lặp tới xanh (KHÔNG bỏ qua test đỏ).
 3. `ruff` + `pyright` + `lint-imports` (8 contract).
 4. **Docs** — cập nhật 2 docs AS-IS (không changelog/banner). Mermaid/ASCII cho flow Trade emission nếu giúp.
@@ -48,7 +48,7 @@
 - [x] `git grep` LotTrackingHelper/_consumed_pnl sạch ở src/tests/docs-AS-IS
 
 ## Parity note (AS-IS)
-- Không có golden-number regression test trước R4 → parity chứng minh bằng: (1) money-math bất biến — closing equity = `initial − Σ(fill commissions) + Σ(gross pnl)`, không đổi vì on_fill debit per-fill + on_trade credit gross pnl y hệt FIFO cũ; (2) 560 test xanh gồm e2e (hitnrun2/engulfing/persistence) + `mark_to_market` (MTM-on vs off metrics byte-identical).
+- Không có golden-number regression test trước R4 → parity chứng minh bằng: (1) money-math bất biến — closing equity = `initial − Σ(fill commissions) + Σ(gross pnl)`, không đổi vì on_fill debit per-fill + on_trade credit gross pnl y hệt FIFO cũ; (2) 560 test xanh gồm e2e (engulfing/persistence) + `mark_to_market` (MTM-on vs off metrics byte-identical).
 - Đổi granularity equity-curve realized: bỏ điểm record-on-open (open-fill không còn tạo equity point). KHÔNG ảnh hưởng: persisted curve dùng `_mtm_curve` (per-bar, broker `total_equity`) không đổi; `total_return`/`cagr` phụ thuộc closing equity không đổi. Strategy hiện không scale → Trade/metrics khớp.
 
 ## Success Criteria

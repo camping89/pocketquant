@@ -28,7 +28,7 @@ Verify theo tầng: broker unit → backtest integration → engine/risk → ful
 ## Implementation Steps
 
 1. Broker unit: `uv run pytest tests/core_test/infra/brokers -q` → Phase 1 tests + characterization + SL/TP suite PASS.
-2. Divide-by-zero: targeted check 2 hàm metric không phát RuntimeWarning (không gate toàn suite — red-team C12): `uv run pytest tests/backtest_test/engine/test_engulfing_backtest.py tests/backtest_test/engine/test_hitnrun2_backtest.py -W error::RuntimeWarning -q`.
+2. Divide-by-zero: targeted check 2 hàm metric không phát RuntimeWarning (không gate toàn suite — red-team C12): `uv run pytest tests/backtest_test/engine/test_engulfing_backtest.py -W error::RuntimeWarning -q`.
 3. Verify số (re-derive, KHÔNG hard-pin — red-team C9): engulfing broker final balance == `10000 + Σ(t.pnl for t in trades)` từ trade log của chính run; structural "no double-count" (test #4 Phase 1).
 4. SL/TP exit accounting: `tests/core_test/infra/brokers/test_paper_broker_sl_tp_fill.py` + Phase 1 test #6 (balance assertion) — red-team C5.
 5. Forward sizing không regress (red-team C1/C8): vì giữ `available_balance = _balance`, sizing không đổi. Verify bằng `uv run pytest tests/engine_test -q` + nếu chưa có test sizing trực tiếp, xác nhận `available_balance == _balance` qua Phase 1 test #8 (đủ vì semantics không đổi).

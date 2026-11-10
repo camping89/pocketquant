@@ -33,7 +33,7 @@ Hai tài liệu trong `docs/`: (1) vì sao engine KHÔNG hỗ trợ scale-out/mu
 
 **Doc 2 — Swing pivot education.** Nội dung:
 - Swing high/low là gì (đỉnh/đáy cục bộ); phân biệt với max/min cửa sổ thô.
-- Cách tính: max(highs[-N:]) / min(lows[-N:]) — cách `EngulfingStrategy` + `hitnrun2` dùng làm key-level proxy.
+- Cách tính: max(highs[-N:]) / min(lows[-N:]) — cách `EngulfingStrategy` dùng làm key-level proxy.
 - Vì sao dùng làm TP key-level (giá hay phản ứng tại swing trước; TP đặt tại đó hợp lý hơn số tròn tùy ý).
 - 2-3 ví dụ ASCII minh họa (1 case key-level xa hơn RR 1:1 → TP nhảy lên key; 1 case key-level gần → rơi về RR 1:1).
 - Lưu ý: đây là proxy đơn giản, KHÔNG phải swing-pivot detection thật (đã loại ở brainstorm) — ghi rõ để không gây hiểu nhầm.

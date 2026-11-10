@@ -37,7 +37,7 @@ Rút ruột collector: rename `BacktestResultAppService`→`BacktestReportAppSer
 
 ## Invariants (mọi phase giữ)
 
-- **Parity byte-for-byte**: engulfing/hitnrun2 characterization tests pass KHÔNG sửa số (max_drawdown/total_return/Sharpe/total_trades/gross PnL). Đây là bằng chứng broker-sourced == shadow cũ.
+- **Parity byte-for-byte**: engulfing characterization tests pass KHÔNG sửa số (max_drawdown/total_return/Sharpe/total_trades/gross PnL). Đây là bằng chứng broker-sourced == shadow cũ.
 - **Single equity source**: sau R5 collector KHÔNG còn tự tính equity — mọi giá trị equity từ `broker.get_balance()`.
 - **Commission KHÔNG double**: `on_fill` chỉ stamp `result.commission` lên `Fill` doc (broker đã trừ balance); collector không cộng dồn debit.
 - import-linter 8 contract xanh; collector (`engine.backtest`) import `IBrokerPort` từ `core.domain.brokers` — hợp lệ `app ◁ engine ◁ core`. No fastapi/bson.

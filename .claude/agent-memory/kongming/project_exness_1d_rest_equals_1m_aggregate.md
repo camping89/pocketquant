@@ -23,10 +23,10 @@ Exness `GET .../instruments/XAUUSD/conditions` on this account returns no `order
 field (keys: calc_mode, exec_mode, trade_mode, trade_sessions, volume_*, swap_*, ...), so
 pending-stop support stays unverifiable read-only.
 
-Prod state 2026-11-01 08:00Z: 4 paper subscriptions (hitnrun2 + engulfing on
-BTCUSDT:BINANCE 1m running, hitnrun2 XAUUSD:EXNESS 1m running, engulfing EURUSD:EXNESS 1h
+Prod state 2026-11-01 08:00Z: paper subscriptions (engulfing on
+BTCUSDT:BINANCE 1m running, engulfing EURUSD:EXNESS 1h
 stopped), 0 exness-broker subs, entries_paused=true, live_trading=false, 2 open paper
-positions on BTCUSDT:BINANCE. The 2026-10-31 handoff listed only one subscription.
+positions on BTCUSDT:BINANCE.
 
 **Why:** The STF-to-MTF advice first claimed an "up to an hour" lag and an hourly
 freshness job; the owner asked for a verified correction and a 1d cascade plan.

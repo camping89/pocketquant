@@ -16,7 +16,7 @@ Date: 2026-11-01 (Asia/Bangkok). Repo `D:/w/_me/algotrading/pocketquant`, branch
 
 | # | Decision |
 |---|---|
-| C1 | Retire STF fully: delete hitnrun2, engulfing, engulfing_pullback30_touch, `engulfing_detector.py`, registry entries and their tests; no STF baseline, no compatibility, no deprecate-and-keep (A1, A5, A10). |
+| C1 | Retire STF fully: delete engulfing, engulfing_pullback30_touch, `engulfing_detector.py`, registry entries and their tests; no STF baseline, no compatibility, no deprecate-and-keep (A1, A5, A10). |
 | C2 | Keep the web Engulf overlay; its golden fixture becomes web-owned; rewrite the "mirror of the Python detector" comment (A10). |
 | C3 | Subscription replaces `interval` with ordered `intervals` (lowest = entry) and adds generic `parameters` validated by the strategy class with strategy-declared defaults; unique `(strategy_code, symbol, intervals)`; each higher interval is a multiple of the entry interval; edit only while stopped (A6, A16). |
 | C4 | Higher-timeframe context is read from Mongo by the engine in `StrategyAppService._on_bar_completed` (one path for live, warm-up, backtest) through a per-(symbol, interval) cache shared by instances, re-queried only on bucket rollover, with one calendar-aware "closed before this instant" filter (A13). Never in the strategy class (import-linter). Never from live 1d/1w `BarCompletedEvent`s. |

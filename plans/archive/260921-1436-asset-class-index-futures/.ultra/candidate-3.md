@@ -351,7 +351,6 @@ exits 0 and prints `3 passed`.
   `tests/backtest_test/engine/test_backtest_app_service_persistence.py` 4,
   `scripts/backfill/test_binance_bars.py` 3, `tests/scripts/rubric/test_reconciliation.py` 2,
   `tests/backtest_test/engine/test_result_collector_mark_to_market.py` 2,
-  `tests/backtest_test/engine/test_hitnrun2_backtest.py` 2,
   `tests/backtest_test/engine/test_engulfing_pullback30_touch_backtest.py` 2,
   `tests/backtest_test/engine/test_engulfing_backtest.py` 2,
   `tests/app_test/market_data/test_cascade_aggregator.py` 2, plus one each in

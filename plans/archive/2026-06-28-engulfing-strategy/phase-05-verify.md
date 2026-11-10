@@ -36,7 +36,7 @@ Verify theo thứ tự rẻ → đắt: lint → unit → integration → import
 4. `uv run pytest tests/backtest_test -q` — integration engulfing ra ≥2 trade.
 5. `uv run pytest tests/ -q` — full suite (strategy registry + `tests/baseline/test_openapi_snapshot.py`).
 6. `uv run lint-imports` — xác nhận 7 contracts (`engulfing.py` chỉ import core; detector zero deps ngoài).
-7. OpenAPI snapshot: snapshot là **schema-only** (verified — `/backtest/strategies` trả `list[str]` titled, không có enum strategy-code; `hitnrun2` không xuất hiện trong snapshot). `engulfing` là runtime value → **không đổi snapshot, không cần regenerate**. Nếu snapshot vỡ → đó là schema regression BẤT NGỜ (từ 260628-1514?) → điều tra, KHÔNG regenerate vô tội vạ.
+7. OpenAPI snapshot: snapshot là **schema-only** (verified — `/backtest/strategies` trả `list[str]` titled, không có enum strategy-code). `engulfing` là runtime value → **không đổi snapshot, không cần regenerate**. Nếu snapshot vỡ → đó là schema regression BẤT NGỜ (từ 260628-1514?) → điều tra, KHÔNG regenerate vô tội vạ.
 8. `cd web && npm run lint && npm run build && npm run test` — vitest engulfing.test.ts khớp fixture copy.
 9. Smoke E2E: sync 1 symbol có dữ liệu; enqueue backtest engulfing qua API; poll request → status completed, trades > 1; mở chart bật toggle Engulfing → markers strong/weak hiện cùng backtest markers.
 

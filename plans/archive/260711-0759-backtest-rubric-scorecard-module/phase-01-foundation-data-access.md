@@ -49,7 +49,7 @@ scripts/rubric/
 
 ## Success Criteria
 
-- [ ] `list_finished_runs()` trả 6 run; `dedup_runs` gộp `hitnrun2` 546f/6b52 → 5 canonical.
+- [ ] `list_finished_runs()` trả 6 run.
 - [ ] `load_trades('019f36d2…')` trả 8629 TradeRow, mọi field float (không Decimal/str).
 - [ ] `load_bars('BTCUSDT:BINANCE','1m',start,end)` trả struct array sorted theo datetime, khớp range run.
 - [ ] Không credential hardcode; chạy được qua `uv run`.

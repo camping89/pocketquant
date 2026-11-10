@@ -31,9 +31,6 @@ Validated implementation of trading calculation fix across backend (Python) and 
 - ✅ `test_engulfing_registered_in_strategy_registry`
 - ✅ `test_backtest_multi_trade_on_repeated_engulfing_round_trips`
 - ✅ `test_backtest_no_trades_on_choppy_market`
-- ✅ `test_backtest_long_round_trip_on_downtrend` (hitnrun2)
-- ✅ `test_backtest_short_round_trip_on_uptrend` (hitnrun2)
-- ✅ `test_backtest_multi_trade_after_fill_reset` (hitnrun2)
 - ✅ `test_backtest_sharpe_bounded_and_realized_metrics_present`
 
 #### Paper Broker Tests (Limit Orders, SL/TP, Events)

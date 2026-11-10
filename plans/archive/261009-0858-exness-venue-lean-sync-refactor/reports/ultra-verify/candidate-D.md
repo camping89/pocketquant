@@ -15,7 +15,7 @@ created: 2026-10-09
 # Exness venue + lean sync-policy refactor
 
 ## Overview
-Exness becomes a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`). Binance, OKX, PaperBroker, `hitnrun2` and `engulfing` all stay. First comes a read-only spike. Then the sync pipeline is refactored into one `SyncPolicy` per provider plus one shared runner, with Binance as the proving provider and characterization tests pinning its behaviour. Exness is added as policy #2. Validation follows (PaperBroker `spread`, backtests, a min-lot live round trip per strategy), then docs. MT5 is documented only. There is no MCP work and no deployment topology change.
+Exness becomes a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`). Binance, OKX, PaperBroker and `engulfing` all stay. First comes a read-only spike. Then the sync pipeline is refactored into one `SyncPolicy` per provider plus one shared runner, with Binance as the proving provider and characterization tests pinning its behaviour. Exness is added as policy #2. Validation follows (PaperBroker `spread`, backtests, a min-lot live round trip per strategy), then docs. MT5 is documented only. There is no MCP work and no deployment topology change.
 
 ## Goals
 - G1: Exness works as a live venue (candles, ticks, orders, positions) through the same ports and strategies.
@@ -55,7 +55,7 @@ The executor must never print, log or commit key material.
 ## Success criteria (D1-D7, advice section 9)
 - D1: `POST /api/v1/market-data/sync` with `{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000,"source":"bulk_sync_api"}` returns `status=completed` and `total_bars>=1000`. During market hours, the SSE bar stream for `XAUUSD%3AEXNESS` emits `"is_in_progress": true` within 60 s and the quote stream emits a quote.
 - D2: one min-lot live order per strategy reaches `FILLED` via the events WS within 10 s of the ACK, appears in `GET /api/v1/trading/positions`, and closes by SL/TP.
-- D3: `hitnrun2` (1m) and `engulfing` (1h) backtests on Exness bars finish in `backtest_runs` with a non-empty trades list. PaperBroker has a `spread` parameter.
+- D3: `engulfing` (1h) backtests on Exness bars finish in `backtest_runs` with a non-empty trades list. PaperBroker has a `spread` parameter.
 - D4: `sync_internals/` is gone, `app/di` has 3 provider modules, market-data routes live in 2 files, and `scripts/code_metrics.py` reports tiny share ≤30% and pure delegations ≤20 (see question 1).
 - D5: `docs/code-standards.md` is rewritten with no stale status claims, and `uv run lint-imports` reports exactly 3 contracts kept.
 - D6: the Binance tests are unchanged and pass, and the OKX characterization tests pass. `just test`, ruff, pyright and lint-imports are green, and the CI deploy is green with `11-verify.sh` at 19/19.
@@ -1388,16 +1388,15 @@ CFD backtests pay the spread. Exness M1 and H1 history exists for the three inst
 - **Verify:** the six recorded `bar_count` values meet these thresholds; `ssh ... 'docker logs pocketquant-app --since 26h 2>&1 | grep -c "market_data.sync_backfill.completed"'` prints ≥1.
 
 ### Task 09.4: Backtests on Exness bars (D3)
-- **Goal:** both strategies have finished runs with trades.
+- **Goal:** `engulfing` has finished runs with trades.
 - **Target files and symbols:** `POST /api/v1/backtest/run`; `reports/exness-backtests.md`.
 - **Steps:**
-  1. For each instrument code `C` in (XAUUSD, EURUSD, BTCUSD), take `S` = the median spread recorded in `## Gate` of `exness-spike-results.md`. Submit `{"strategy_id":"hitnrun2","symbol":"C:EXNESS","interval":"1m","start_date":<now-30d ISO>,"end_date":<now ISO>,"initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":S}` and `{"strategy_id":"engulfing","symbol":"C:EXNESS","interval":"1h","start_date":<now-365d ISO>,...same...}`.
+  1. For each instrument code `C` in (XAUUSD, EURUSD, BTCUSD), take `S` = the median spread recorded in `## Gate` of `exness-spike-results.md`. Submit `{"strategy_id":"engulfing","symbol":"C:EXNESS","interval":"1h","start_date":<now-365d ISO>,...same...}`.
   2. Poll `GET /api/v1/backtest/{run_id}` every 10 s until `status != "started"`.
   3. Record one Markdown row per run in `reports/exness-backtests.md`, exactly in the form `| <strategy> | <symbol> | <status> | <trade_count> | <run_id> |`. `trade_count` is `len(items)` from `GET /api/v1/backtest/{run_id}/trades?limit=50`.
-- **Success criteria:** all 6 runs are `finished`, and for each strategy at least one run has `trade_count > 0`.
-- **Verify:** all three commands below must pass. Set `R=plans/261009-0858-exness-venue-lean-sync-refactor/reports/exness-backtests.md` first.
-  - `grep -cE "^\| (hitnrun2|engulfing) \| [A-Z]+:EXNESS \| finished \|" $R` prints `6`.
-  - `grep -cE "^\| hitnrun2 \| [A-Z]+:EXNESS \| finished \| [1-9]" $R` prints ≥1.
+- **Success criteria:** all 3 runs are `finished`, and at least one run has `trade_count > 0`.
+- **Verify:** both commands below must pass. Set `R=plans/261009-0858-exness-venue-lean-sync-refactor/reports/exness-backtests.md` first.
+  - `grep -cE "^\| engulfing \| [A-Z]+:EXNESS \| finished \|" $R` prints `3`.
   - `grep -cE "^\| engulfing \| [A-Z]+:EXNESS \| finished \| [1-9]" $R` prints ≥1.
 
 ## Verification (phase gate)
@@ -1455,7 +1454,7 @@ One minimum-lot live round trip per strategy on Exness, with SL attached, and on
 - **Steps:**
   1. Ask the user to set `EXNESS_LIVE_TRADING=true` and `EXNESS_DAILY_LOSS_CAP_PCT=<value>`, and to leave `EXNESS_MAX_LOTS` unset (min lot only), in `pocketquant-config/vps/default/.env`, then redeploy.
   2. Check that the variables are present without printing them: `ssh ... 'docker exec pocketquant-app sh -c "test \"\$EXNESS_LIVE_TRADING\" = true && test -n \"\$EXNESS_DAILY_LOSS_CAP_PCT\" && test -z \"\$EXNESS_MAX_LOTS\" && echo ok"'`.
-  3. Ask: "Start live min-lot subscriptions hitnrun2 on XAUUSD:EXNESS 1m and engulfing on XAUUSD:EXNESS 1h?" STOP until the user answers yes. If the user wants a lot size above minimum, STOP (stop condition: a live order would exceed min lot).
+  3. Ask: "Start a live min-lot subscription for engulfing on XAUUSD:EXNESS 1h?" STOP until the user answers yes. If the user wants a lot size above minimum, STOP (stop condition: a live order would exceed min lot).
 - **Success criteria:** the check prints `ok` and the user's "yes" is recorded.
 - **Verify:** the ssh command prints `ok`; `grep -c "user approved live" plans/261009-0858-exness-venue-lean-sync-refactor/reports/live-validation-results.md` prints `1`.
 
@@ -1463,7 +1462,7 @@ One minimum-lot live round trip per strategy on Exness, with SL attached, and on
 - **Goal:** both strategies run live on Exness.
 - **Target files and symbols:** the subscription API.
 - **Steps:**
-  1. Create the subscriptions: `ssh ... 'docker exec pocketquant-app sh -c "curl -s -X POST http://localhost:41921/api/v1/strategies/hitnrun2/subscriptions -H \"Content-Type: application/json\" -H \"X-Admin-Token: \$ADMIN_TOKEN\" -d \"{\\\"symbol\\\":\\\"XAUUSD:EXNESS\\\",\\\"interval\\\":\\\"1m\\\"}\""'`. Record the returned `id`. Do the same for `engulfing` with `1h`.
+  1. Create the subscription: `ssh ... 'docker exec pocketquant-app sh -c "curl -s -X POST http://localhost:41921/api/v1/strategies/engulfing/subscriptions -H \"Content-Type: application/json\" -H \"X-Admin-Token: \$ADMIN_TOKEN\" -d \"{\\\"symbol\\\":\\\"XAUUSD:EXNESS\\\",\\\"interval\\\":\\\"1h\\\"}\""'`. Record the returned `id`.
   2. Start each: `POST /api/v1/subscriptions/{id}/start` with the same headers.
   3. Within 30 s the reconcile loop loads both strategies (`reconcile_interval_seconds` is 5 by default).
 - **Success criteria:** both subscriptions are running against the Exness broker.
@@ -1481,7 +1480,7 @@ One minimum-lot live round trip per strategy on Exness, with SL attached, and on
   4. After both round trips, stop both subscriptions (`POST /api/v1/subscriptions/{id}/stop`).
   5. If any order shows a lot above min or a missing SL in the Exness snapshot, STOP and ask the user (stop condition).
 - **Success criteria:** two rows, each with latency ≤10 s, the position seen, and a close recorded.
-- **Verify:** `grep -cE "^\| (hitnrun2|engulfing) \| .* \| filled \| [0-9.]+s \| min-lot \| sl=" plans/261009-0858-exness-venue-lean-sync-refactor/reports/live-validation-results.md` prints `2`, and every recorded latency value is ≤10.
+- **Verify:** `grep -cE "^\| engulfing \| .* \| filled \| [0-9.]+s \| min-lot \| sl=" plans/261009-0858-exness-venue-lean-sync-refactor/reports/live-validation-results.md` prints `2`, and every recorded latency value is ≤10.
 
 ### Task 10.4: One-week observation, including a weekend
 - **Goal:** the after-one-week success metric holds.

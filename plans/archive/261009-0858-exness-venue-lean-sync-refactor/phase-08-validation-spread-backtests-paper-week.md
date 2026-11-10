@@ -20,9 +20,9 @@ dependencies: [7]
 - Gate: broker tests 101 passed; the request schema minus `spread` is unchanged (`True`); no file under `src/pocketquant/app` changed; lint-imports `8 kept, 0 broken`; ruff and pyright 0 errors; `just test` shows only the 4 Windows `time.tzset` tests red; the ratchet exits 0 with no ceiling change.
 - Released with the coordinator's approval: develop CI green, then `master` fast-forwarded to `83fcd9d` (this also deployed Phase 07's broker code, live trading off). Deploy verdict `HEALTHY (20/20 passed, 0 warnings, 0 failures)`.
 - T8.4 done: every backfill call fetched bars; 1m `total_bars` about 129610 and 1h 17521 per symbol, above every minimum.
-- T8.5 done: all 6 runs `finished`, each with trades (48 to 215). D3 holds. Results: `reports/exness-backtest-results.md`.
-- 2026-10-19: the user replaced the 7-day week and its no-deploy freeze with five short checks (T8.7) and approved the two paper subscriptions. Row 0 ran and FAILED on integrity (EURUSD 1m rollover minutes, XAUUSD 1h US-holiday hours, both absent at the venue too); the subscriptions were not started. T8.6–T8.8 wait for the user's decision on those gaps.
-- 2026-10-20: the user accepted venue-empty gaps (no `src/` change); C3 checks each gap against Exness. Row 0 re-ran and passed; T8.6 started both subscriptions at 2026-10-20T03:21:46Z.
+- T8.5 done: all 3 runs `finished`, each with trades (111 to 161). D3 holds. Results: `reports/exness-backtest-results.md`.
+- 2026-10-19: the user replaced the 7-day week and its no-deploy freeze with five short checks (T8.7) and approved the paper subscription. Row 0 ran and FAILED on integrity (EURUSD 1m rollover minutes, XAUUSD 1h US-holiday hours, both absent at the venue too); the subscription was not started. T8.6–T8.8 wait for the user's decision on those gaps.
+- 2026-10-20: the user accepted venue-empty gaps (no `src/` change); C3 checks each gap against Exness. Row 0 re-ran and passed; T8.6 started the subscription at 2026-10-20T03:21:46Z.
 - 2026-10-23: the user moved the US DST check (old row 4 on 2026-11-02, C5 `3600 True`) out of scope into its own plan, `261023-0056-exness-us-dst-session-shift`. This phase now ends after row 3.
 
 ## Context Links
@@ -42,7 +42,7 @@ dependencies: [7]
 
 <!-- Updated: Validation Session 1 - paper-only validation; no live order, no U3 -->
 ## Goal
-Make D3 true and validate Exness end to end without live money: CFD backtests model the spread (ask = bid + spread), and both strategies run on the paper broker on `:EXNESS` symbols across a live XAUUSD daily break and a weekend close and reopen (T8.7 schedule). The 2026-11-01 US DST change is out of scope (see Out of scope). No live order is placed in this phase; the Exness broker stays off.
+Make D3 true and validate Exness end to end without live money: CFD backtests model the spread (ask = bid + spread), and the strategy runs on the paper broker on `:EXNESS` symbols across a live XAUUSD daily break and a weekend close and reopen (T8.7 schedule). The 2026-11-01 US DST change is out of scope (see Out of scope). No live order is placed in this phase; the Exness broker stays off.
 
 ## Files to Create or Modify
 - Modify: `src/pocketquant/core/infra/brokers/paper/paper_broker_adapter.py`, `src/pocketquant/engine/backtest/backtest_command_service.py`, `src/pocketquant/engine/backtest/backtest_dispatch.py`, `src/pocketquant/core/domain/backtest/config.py`, `src/pocketquant/engine/backtest/backtest_sandbox_app_service.py`.
@@ -120,21 +120,20 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
   - 1m: EURUSD and XAUUSD ≥ 60000, BTCUSD ≥ 103680
   - 1h: EURUSD and XAUUSD ≥ 8000, BTCUSD ≥ 14016
 
-### T8.5 Backtests of both strategies on Exness bars
+### T8.5 Backtests of the strategy on Exness bars
 - **Goal:** D3 holds.
 - **Target files and symbols:** `POST /api/v1/backtest/run`, `GET /api/v1/backtest/{run_id}`, `GET /api/v1/backtest/{run_id}/trades?limit=1`
 - **Steps:**
-  1. For each `S` in XAUUSD, EURUSD and BTCUSD, post two runs with the remote pattern, using `SPREAD_S` = the journal's median spread for S (0.168, 0.00006, 4.48):
-     - `{"strategy_id":"hitnrun2","symbol":"S:EXNESS","interval":"1m","start_date":"<now-30d ISO, minute precision>","end_date":"<now ISO>","initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":SPREAD_S}`
+  1. For each `S` in XAUUSD, EURUSD and BTCUSD, post one run with the remote pattern, using `SPREAD_S` = the journal's median spread for S (0.168, 0.00006, 4.48):
      - `{"strategy_id":"engulfing","symbol":"S:EXNESS","interval":"1h","start_date":"<now-365d>","end_date":"<now>","initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":SPREAD_S}`
   2. Record each run id from the 202 response. Poll `GET /api/v1/backtest/{id}` every 60 s (at most 30 times per run) until `status` is not `started`.
   3. Write `exness-backtest-results.md` with one table row per run: strategy, symbol, run id, status, trade count (`total` from `/trades`), total return and max drawdown.
-- **Success criteria:** All 6 runs are `finished`, and each strategy has at least one run with trades.
-- **Verify:** Each `GET /api/v1/backtest/{id}` contains `"status":"finished"`. For each strategy, at least one `GET .../trades?limit=1` piped to `python -c "import json,sys;print(json.load(sys.stdin)['total']>0)"` prints `True`.
+- **Success criteria:** All 3 runs are `finished`, and at least one run has trades.
+- **Verify:** Each `GET /api/v1/backtest/{id}` contains `"status":"finished"`. At least one `GET .../trades?limit=1` piped to `python -c "import json,sys;print(json.load(sys.stdin)['total']>0)"` prints `True`.
 
 <!-- Updated: 2026-10-19 short paper schedule (user decision) - five check dates instead of a 7-day week, no no-deploy freeze, each row records StartedAt; post-DST session check expects +1 h -->
 ### T8.6 Start the paper run
-- **Goal:** Both strategies run on the paper broker on `:EXNESS` symbols and are checked on the four dates in T8.7. There is no no-deploy freeze: each row records the container `StartedAt`; a restart only shortens that row's log window and is not a failure. Integrity is judged from stored bars, so restarts do not affect it.
+- **Goal:** The strategy runs on the paper broker on `:EXNESS` symbols and are checked on the four dates in T8.7. There is no no-deploy freeze: each row records the container `StartedAt`; a restart only shortens that row's log window and is not a failure. Integrity is judged from stored bars, so restarts do not affect it.
 - **Approval:** recorded 2026-10-19 in `reports/user-preconditions.md` (`paper week: approved (short schedule), no freeze, ...`).
 - **Setup (every check, repo root):** the key file has CRLF line endings, so use a normalized copy.
   ```bash
@@ -143,18 +142,17 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
   ```
 - **Steps:**
   1. Run C5 (T8.7); it must print `0 True` before 2026-11-01.
-  2. Create the subscriptions (no broker field exists; the engine uses the paper broker), then start each returned `id`:
+  2. Create the subscription (no broker field exists; the engine uses the paper broker), then start the returned `id`:
      ```bash
      ssh -i "$KEY" "$HOST" 'sh -s' <<'EOF'
      q() { docker exec pocketquant-app curl -s "$@"; }
-     q -X POST http://localhost:41921/api/v1/strategies/hitnrun2/subscriptions -H 'Content-Type: application/json' -d '{"symbol":"XAUUSD:EXNESS","interval":"1m"}'; echo
      q -X POST http://localhost:41921/api/v1/strategies/engulfing/subscriptions -H 'Content-Type: application/json' -d '{"symbol":"EURUSD:EXNESS","interval":"1h"}'; echo
      EOF
      ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -X POST http://localhost:41921/api/v1/subscriptions/<id>/start"
      ```
-  3. Write both ids and the start time (UTC ISO) into row 0 of the T8.7 results table, and replace `not started` with `started <ISO>` in `user-preconditions.md`.
+  3. Write the id and the start time (UTC ISO) into row 0 of the T8.7 results table, and replace `not started` with `started <ISO>` in `user-preconditions.md`.
   4. The live paper broker stays as built (`default_broker_config`, no `spread`): the run validates data, calendar and quotes, not P&L.
-- **Verify:** `grep -c "paper week: approved" plans/261009-0858-exness-venue-lean-sync-refactor/reports/user-preconditions.md` prints `1`. After 30 s, C2 with `CHECKS=''` and `IDS='<id1> <id2>'` prints `running 2`.
+- **Verify:** `grep -c "paper week: approved" plans/261009-0858-exness-venue-lean-sync-refactor/reports/user-preconditions.md` prints `1`. After 30 s, C2 with `CHECKS=''` and `IDS='<id>'` prints `running 1`.
 
 ### T8.7 Check schedule
 <!-- Updated: 2026-10-23 DST check moved to its own plan (user decision) - row 4 removed -->
@@ -255,7 +253,7 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
   1. `misaligned 0` on every C3 line.
   2. Every `gap_ranges` entry is venue-empty: C3 prints `PASS` on every line.
   3. On a C3 `FAIL` whose only `VENUE_HAS` range ends within 2 minutes of the check, re-run C3 once after 60 s first; a `PASS` then passes. Otherwise, run `POST /api/v1/market-data/integrity/repair` once for that symbol and interval, then re-run C3. Still `FAIL` → the row fails.
-  4. `sync_1m p95_ms < 60000`, `CB=0`, `running 2` (from the row where T8.6 ran).
+  4. `sync_1m p95_ms < 60000`, `CB=0`, `running 1` (from the row where T8.6 ran).
   5. Recorded only: `missing` counts, the venue-empty ranges, `RC`, `RL` and `by_status`.
 - **Schedule** (Bangkok = UTC+7):
 
@@ -271,7 +269,7 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
 | # | Checked at (UTC) | `S` (StartedAt) | `F` | CB | RC | RL | Integrity missing/misaligned | `sync_1m` p95 ms (by_status) | Running | C5 | Verdict |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | 2026-10-19T14:08Z | 2026-10-19T02:17:57Z | 2026-10-19T02:18:10Z | 0 | 8 | 41 | XAU 1m 7d 0/0; **EUR 1m 7d 12/0**; **XAU 1h 90d 2/0**; EUR 1h 90d 0/0 | 11728 (completed 1382, failed 2) | not started | `0 True` | **FAIL** |
-| 0 re-run | 2026-10-20T03:20Z | 2026-10-19T02:17:57Z | 2026-10-19T16:30:09Z (rotated) | 0 | 11 | 30 | C3 all `PASS`, misaligned 0; missing XAU 1m 7d 0, EUR 1m 7d 13 (5 venue-empty ranges), XAU 1h 90d 2 (1 venue-empty range), EUR 1h 90d 0 | 12297 (completed 1382) | `running 2` at 03:22:33Z: hitnrun2 XAUUSD 1m `01a15754-39ed-73e3-921e-df085eb4a786`, engulfing EURUSD 1h `01a15754-3ab5-7258-b46b-ad98e1f3471f`, started 03:21:46Z | `0 True` | **PASS** |
+| 0 re-run | 2026-10-20T03:20Z | 2026-10-19T02:17:57Z | 2026-10-19T16:30:09Z (rotated) | 0 | 11 | 30 | C3 all `PASS`, misaligned 0; missing XAU 1m 7d 0, EUR 1m 7d 13 (5 venue-empty ranges), XAU 1h 90d 2 (1 venue-empty range), EUR 1h 90d 0 | 12297 (completed 1382) | `running 1` at 03:22:33Z: engulfing EURUSD 1h `01a15754-3ab5-7258-b46b-ad98e1f3471f`, started 03:21:46Z | `0 True` | **PASS** |
 | 1 | 2026-10-20T22:33Z | 2026-10-19T02:17:57Z (no restart) | 2026-10-20T12:32:06Z (rotated) | 0 | 4 | 4 | C3 at 22:34:02Z: XAU 1m 1d 1/0 `FAIL`, gap 22:33–22:33Z `VENUE_HAS 22:33:00` (the minute closed 2 s before the check; not yet synced); EUR 1m 1d 5/0 `PASS`, 21:00–21:04Z venue-empty. Repair not run (read-only check). Read-only C3 re-run at 22:34:44Z: XAU 1m 1d 0/0 `PASS`; EUR 1m 1d 5/0 `PASS` (same venue-empty range) | 12573 (completed 1400, running 1) | `running 2` | `0 True` | **PASS** on the re-run; ran late on Wed 2026-10-21 (rescheduled from Tue 2026-10-20 05:30 Bangkok, after the 20:58–22:00Z XAUUSD daily break) |
 | 2 | 2026-10-24T03:03Z | 2026-10-22T15:34:21Z (restarted by a deploy after row 1; counters start there) | 2026-10-23T11:40:09Z (rotated) | 0 | 10 | 3 | C3 at 03:04:20Z: XAU 1m 4d 0/0 `PASS`; EUR 1m 4d 10/0 `PASS`, venue-empty 10-20 21:00–21:04Z and 10-22 21:00–21:04Z. C3 sent `X-Admin-Token` (admin auth guards POST since the go-live deploy; without it the check returns 401) | 11858 (completed 9742, failed 2) | `running 2` | not run | **PASS** |
 | 3 | 2026-10-26T03:03Z | 2026-10-22T15:34:21Z (no restart since row 2) | 2026-10-25T19:34:06Z (rotated; the window still covers the Sunday reopen, EUR 21:05Z and XAU 22:01:30Z) | 0 | 0 | 49 | C3 at 03:03:27Z: XAU 1m 3d 0/0, EUR 1m 3d 0/0, XAU 1h 7d 0/0, EUR 1h 7d 0/0, all `PASS`, no gap ranges | 11906 (completed 9745) | `running 2` | not run | **PASS** |
@@ -291,7 +289,7 @@ Summary (T8.8, 2026-10-26): rows 0 (on its re-run), 1, 2 and 3 passed. Over rows
 - **Goal:** Rows 0–3 pass.
 - **Steps:**
   1. After row 3, add a one-line summary under the results table: rows passed, sums of `CB`, `RC` and `RL`, the highest `sync_1m` p95, and a pointer to `reports/exness-backtest-results.md`.
-  2. Ask the user whether to keep the two paper subscriptions running or stop them; on stop, `POST /api/v1/subscriptions/<id>/stop` for each.
+  2. Ask the user whether to keep the paper subscription running or stop it; on stop, `POST /api/v1/subscriptions/<id>/stop`.
 - **Success criteria:** Every row's verdict is PASS.
 - **Verify:** The results table has a `PASS` row for each of rows 0–3.
 

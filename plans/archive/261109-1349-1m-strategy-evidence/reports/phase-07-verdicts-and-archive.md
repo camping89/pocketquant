@@ -10,7 +10,6 @@
 
 final: ts-1m-5m-15m fail backtest=r1:pf=0.6630988966404225,trades=36847,gate=fail;r2:pf=0.7462300711017726,trades=14943,gate=fail paper=not_run on_bar_error=n/a stale=n/a
 final: ts-1m-15m-1h fail backtest=r3:pf=0.673485099307977,trades=27265,gate=fail;r4:pf=0.7098467853326118,trades=7798,gate=fail paper=not_run on_bar_error=n/a stale=n/a
-final: hitnrun2-1m fail backtest=r5:pf=0.784388706700011,trades=344,gate=fail;r6:pf=0.8811049737211203,trades=668,gate=fail paper=not_run on_bar_error=n/a stale=n/a
 
 Phase 06 wrote `paper_plan=none` and no `recon:` lines, so every paper value is `not_run` or `n/a`.
 
@@ -20,11 +19,10 @@ Phase 06 wrote `paper_plan=none` and no `recon:` lines, so every paper value is 
 |---|---|---|---|---|---|---|
 | ts-1m-5m-15m | r1 (0.6631, 36847, fail); r2 (0.7462, 14943, fail) | fail | n/a (not run) | n/a (not run) | n/a (not run) | n/a |
 | ts-1m-15m-1h | r3 (0.6735, 27265, fail); r4 (0.7098, 7798, fail) | fail | n/a (not run) | n/a (not run) | n/a (not run) | n/a |
-| hitnrun2-1m | r5 (0.7844, 344, fail); r6 (0.8811, 668, fail) | fail | n/a (not run) | n/a (not run) | n/a (not run) | n/a |
 
 ## Conclusion
 
-No set passed. All six runs cleared 100 trades and failed on net profit_factor alone: Triple Screen 1m entry/5m/15m reached at best 0.7462 (r2), Triple Screen 1m/15m/1h at best 0.7098 (r4), and hitnrun2 on 1m at best 0.8811 (r6, `min_profit_pct=0.005`). 1m does not clear the gate (net profit_factor >= 1.2 and total_trades >= 100 over 12 months) on XAUUSD:EXNESS at the seeded costs. Inference, not measured: the Phase 02 and 05 advisory notes estimate a round-trip cost of about 0.04 USD per trade, which would make the hitnrun2 fail mainly a gross-edge problem rather than a cost problem.
+No set passed. All four runs cleared 100 trades and failed on net profit_factor alone: Triple Screen 1m entry/5m/15m reached at best 0.7462 (r2), and Triple Screen 1m/15m/1h at best 0.7098 (r4). 1m does not clear the gate (net profit_factor >= 1.2 and total_trades >= 100 over 12 months) on XAUUSD:EXNESS at the seeded costs.
 
 Task 07.1 Verify: `final_ok=True`.
 

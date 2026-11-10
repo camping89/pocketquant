@@ -83,7 +83,7 @@ Grep xác nhận `result_collector.py` đụng `config.start_date` ở 3 chỗ:
 - Modify: `src/pocketquant/backtest/jobs/backtest_strategy_loader.py` (type hint + datetime.combine)
 - Modify: `web/src/components/backtest/backtest-form.tsx` (datetime-local + TZ convert + useTimezone)
 - Regenerate: `tests/baseline/openapi_app_snapshot.json`, `tests/baseline/route_inventory_app_snapshot.json` (recipe: `just baseline` hoặc `BASELINE_UPDATE=1 .venv/bin/python -m pytest tests/baseline/test_openapi_snapshot.py`)
-- Fix fixtures (date→datetime): `tests/backtest_test/engine/test_result_collector_mark_to_market.py`, `test_engulfing_backtest.py`, `test_hitnrun2_backtest.py`, `test_backtest_app_service_persistence.py` (2 chỗ), `test_result_collector_fifo.py`
+- Fix fixtures (date→datetime): `tests/backtest_test/engine/test_result_collector_mark_to_market.py`, `test_engulfing_backtest.py`, `test_backtest_app_service_persistence.py` (2 chỗ), `test_result_collector_fifo.py`
 
 ## Implementation Steps
 

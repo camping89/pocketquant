@@ -15,13 +15,12 @@ No single-timeframe strategy code, test, doc or comment remains, `STRATEGY_REGIS
 
 ## Context
 
-- C1: delete hitnrun2, engulfing, engulfing_pullback30_touch, `engulfing_detector.py`, the registry entries and their tests; no compatibility, no deprecate-and-keep. C2: keep the web Engulf overlay; its golden fixture becomes web-owned; rewrite the comments that name the Python detector.
+- C1: delete engulfing, engulfing_pullback30_touch, `engulfing_detector.py`, the registry entries and their tests; no compatibility, no deprecate-and-keep. C2: keep the web Engulf overlay; its golden fixture becomes web-owned; rewrite the comments that name the Python detector.
 - Registry `src/pocketquant/core/domain/strategy/services/__init__.py:1-22` (three imports, `STRATEGY_REGISTRY` `:11-15`, `__all__` `:17-22`). Package `src/pocketquant/core/domain/strategy/patterns/` (`__init__.py`, `engulfing_detector.py`) is imported only by the deleted strategy and its test. Nothing in `src` outside `core/domain/strategy` names an STF code (scout-backend §2).
 - `IStrategyService` (`src/pocketquant/core/domain/strategy/strategy_service_interface.py:16-43`) holds `_open_direction`; `load_strategy(config, strategy_class=None)` builds the class directly (`engine/strategy/strategy_app_service.py:188-215`); a warm-up replay signal is answered with `on_order_rejected("warmup")` (`:265-266`).
 - <!-- Red team 2026-11-01: #15 --> Test doubles (plan.md verdict): `tests/strategy_doubles.py` holds one strategy double, `ScriptedStrategy`, created here with its fixed rule only (no per-bar script yet: no test needs one in this phase). Later phases extend this class; they add no second strategy double. The registry key stays `"probe"` and the fixture stays `probe_registry`, the names later phases use.
 - Registry lookups a test can reach: `StrategyReconcileAppService._ensure_instances` (`engine/live/strategy_reconcile_app_service.py:121`), `StrategyCommandService.add_symbol` (`engine/strategy/strategy_command_service.py:58`), `BacktestExecutionService.run` (`engine/backtest/backtest_execution_service.py:103-108`), and direct `STRATEGY_REGISTRY[...]`. A test that reaches one of them needs the probe registered.
 - Tests import from the `tests` package (`tests/conftest.py:14-22` puts the workspace root on `sys.path`; precedent `tests/app_test/integration/test_safeguards_api.py:18`). `NoStoredBars` and `Continuous24x7CalendarFactory` stay where they are in this phase; Phase 08 moves them into `tests/strategy_doubles.py`.
-- The two hitnrun2-named tests get behaviour names: `test_hitnrun2_signals_on_the_first_live_bar_after_481_stored_bars` (`tests/engine_test/test_strategy_warm_up.py:156`) and `test_hitnrun2_on_order_rejected_clears_open_direction` (`tests/engine_test/test_strategy_reject_delivery.py:126`).
 - Rubric: `scripts/rubric/static_audit.py` stays (generic over the registry); `tests/scripts/rubric/test_static_audit.py:7-36` parametrizes the STF codes; only `test_unknown_strategy_falls_back_not_raises` (`:39-44`) survives. The DEFAULTS rewrite of the audit is Phase 06.
 - Web: `web/src/lib/indicators/engulfing.ts:4-6` (mirror comment) and `:63-65` (threshold comment with the doc link); `engulfing.test.ts:4-5`; the fixture `_doc` string in `web/src/lib/indicators/__fixtures__/engulfing_golden_fixture.json:2` names the Python detector and old phases. The test reads only `cases` (`engulfing.test.ts:20`).
 - Docs: `docs/swing-pivot-key-level.md` (16 lines, all about the engulfing strategy; only inbound link `engulfing.ts:65`); `docs/system-architecture.md:34` ends with the stale sentence "No current strategy adds; each holds at most one position."
@@ -47,7 +46,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 ## Files
 
 - Create: `tests/strategy_doubles.py`.
-- Delete: `src/pocketquant/core/domain/strategy/services/hitnrun2_strategy_service.py`, `.../engulfing_strategy_service.py`, `.../engulfing_pullback30_touch_strategy_service.py`, `src/pocketquant/core/domain/strategy/patterns/` (whole package); `tests/core_test/unit/domain/strategy/test_hitnrun2.py`, `test_engulfing.py`, `test_engulfing_pullback30_touch.py`, `tests/core_test/unit/domain/strategy/patterns/` (test and Python fixture copy); `tests/backtest_test/engine/test_hitnrun2_backtest.py`, `test_engulfing_backtest.py`, `test_engulfing_pullback30_touch_backtest.py`; `docs/swing-pivot-key-level.md`.
+- Delete: `src/pocketquant/core/domain/strategy/services/engulfing_strategy_service.py`, `.../engulfing_pullback30_touch_strategy_service.py`, `src/pocketquant/core/domain/strategy/patterns/` (whole package); `tests/core_test/unit/domain/strategy/test_engulfing.py`, `test_engulfing_pullback30_touch.py`, `tests/core_test/unit/domain/strategy/patterns/` (test and Python fixture copy); `tests/backtest_test/engine/test_engulfing_backtest.py`, `test_engulfing_pullback30_touch_backtest.py`; `docs/swing-pivot-key-level.md`.
 - Modify src: `src/pocketquant/core/domain/strategy/services/__init__.py`.
 - Modify tests: `tests/conftest.py`; the files listed in Tasks 05.2-05.3.
 - Modify web and docs: `web/src/lib/indicators/engulfing.ts`, `engulfing.test.ts`, `__fixtures__/engulfing_golden_fixture.json` (`_doc` only), `docs/system-architecture.md` (`:34` only).
@@ -95,14 +94,14 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 **Target files and symbols:** `tests/app_test/integration/test_admin_token_guard.py:27`, `test_backtest_name_api.py:18`, `test_backtest_orders_api.py:47,87`, `test_backtest_verdict_api.py:18`, `test_declarative_subscription_state_api.py:23`, `tests/backtest_test/test_backtest_result_verdict.py:5`, `tests/core_test/infra/brokers/test_paper_broker_spread.py:119`, `tests/core_test/unit/domain/subscription/test_subscription_desired_actual_state.py:21,45,78,91,94`, `tests/engine_test/market_data/test_tracked_symbols_service.py:109`, `tests/scripts/rubric/test_persist_shape.py:16`; two-code files `tests/core_test/infra/persistence/backtest/test_backtest_repository_slimmed.py:88-106`, `tests/scripts/rubric/test_dedup.py`, `tests/scripts/rubric/test_renderers.py:82-135`; `tests/scripts/rubric/test_static_audit.py`; `tests/core_test/test_core_layout_contract.py:11`; the three manual files.
 
 **Steps:**
-1. Single-code files: replace the code with `"probe"`. Two-code files: `hitnrun2` becomes `"breakout"` and `engulfing` becomes `"reversal"`, keeping every assertion's logic (for example `md.index("reversal") < md.index("breakout")`).
+1. Replace the code with `"probe"`, keeping every assertion's logic.
 2. `test_static_audit.py`: delete `_STRATEGIES` and every test except `test_unknown_strategy_falls_back_not_raises`.
 3. `test_core_layout_contract.py`: delete the `NEW_MODULES` line `:11`.
 4. `run-backtest.bru`: body `{"strategy_id": "triple_screen", "symbol": "XAUUSD:EXNESS", "intervals": ["15m", "1h", "4h"], "start_date": "2026-01-01", "end_date": "2026-03-30", "initial_capital": 10000, "parameters": {}}`; `list-results.bru`: `strategy_id: triple_screen`. `api-test.http`: the `:113` body gets the same values; delete the `/backtest/optimize` request (`:115-119`, no route); line `:131` becomes `# 5. Choose triple_screen and verify backtest markers appear`.
 
 **Success criteria:** no STF name in `tests/` outside the files Task 05.4 deletes.
 
-**Verify:** `git grep -n -i -E "hitnrun|engulfing" -- tests ':!tests/core_test/unit/domain/strategy' ':!tests/backtest_test/engine/test_hitnrun2_backtest.py' ':!tests/backtest_test/engine/test_engulfing_backtest.py' ':!tests/backtest_test/engine/test_engulfing_pullback30_touch_backtest.py' | wc -l` prints `0`.
+**Verify:** `git grep -n -i -E "engulfing" -- tests ':!tests/core_test/unit/domain/strategy' ':!tests/backtest_test/engine/test_engulfing_backtest.py' ':!tests/backtest_test/engine/test_engulfing_pullback30_touch_backtest.py' | wc -l` prints `0`.
 
 ### Task 05.4 — Delete the STF source and its tests
 
@@ -117,7 +116,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 
 **Success criteria:** no STF name in `src`, `tests` or `scripts`; the registry has no keys.
 
-**Verify:** `echo "names=$(git grep -n -i -E "hitnrun|engulfing" -- src tests scripts | wc -l | tr -d ' ') keys=$(uv run python -c "from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY; print(len(STRATEGY_REGISTRY))")"` prints `names=0 keys=0`.
+**Verify:** `echo "names=$(git grep -n -i -E "engulfing" -- src tests scripts | wc -l | tr -d ' ') keys=$(uv run python -c "from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY; print(len(STRATEGY_REGISTRY))")"` prints `names=0 keys=0`.
 
 ### Task 05.5 — Web comments, fixture note, docs
 

@@ -15,7 +15,7 @@ dependencies: [1]
 ## Requirements
 
 - Functional: `on_bar_completed(bar) -> Signal | None`; emit Signal khi engulfing strong + position cap còn trống.
-- Functional: `on_order_filled(order, fill_price) -> None` reset `_open_direction` khi opposite-side fill (giống `hitnrun2`).
+- Functional: `on_order_filled(order, fill_price) -> None` reset `_open_direction` khi opposite-side fill.
 - Functional: SL/TP theo công thức plan; quality filter `max_rejection_wick_pct`; `direction` long|short|both.
 - Non-functional: zero new deps; strategy trong `core/domain/strategy/services/`; tái dùng `detect_engulfing` (DRY — KHÔNG copy logic).
 
@@ -46,7 +46,7 @@ dependencies: [1]
 
 > **Off-by-one (red-team Finding 8 — PIN):** `key_window` là N bar **strictly trước bar hiện tại**. `max()/min()` KHÔNG được gồm high/low của bar pattern hiện tại (snapshot trước khi append ở step 1 đảm bảo điều này). Test phải assert: high của bar hiện tại KHÔNG nằm trong key-level set. `maxlen=key_level_lookback_bars` (không +1) vì snapshot trước append.
 
-> **`_open_direction` set sau fill (red-team Finding 6 — đổi so với hitnrun2):** KHÔNG set `_open_direction` lạc quan trong `on_bar_completed` (hitnrun2 làm vậy → wedge khi order bị REJECT/size=0, vì `_process_signal` reject nhưng `_open_direction` đã LONG → kẹt vĩnh viễn). Thay vào: set `_open_direction` trong `on_order_filled` khi **entry-side fill** xác nhận (BUY→LONG, SELL→SHORT mở mới), reset khi **opposite-side fill** đóng. Cần phân biệt entry-fill vs exit-fill: dùng `_open_direction is None` (đang flat → fill này là entry) vs not-None (đang có vị thế → opposite-side fill là exit).
+> **`_open_direction` set sau fill (red-team Finding 6):** KHÔNG set `_open_direction` lạc quan trong `on_bar_completed` (làm vậy → wedge khi order bị REJECT/size=0, vì `_process_signal` reject nhưng `_open_direction` đã LONG → kẹt vĩnh viễn). Thay vào: set `_open_direction` trong `on_order_filled` khi **entry-side fill** xác nhận (BUY→LONG, SELL→SHORT mở mới), reset khi **opposite-side fill** đóng. Cần phân biệt entry-fill vs exit-fill: dùng `_open_direction is None` (đang flat → fill này là entry) vs not-None (đang có vị thế → opposite-side fill là exit).
 
 **Signal:** `subscription_id=self.id`, `entry_logic=f"engulfing:{bullish|bearish}"`, `confidence` cố định (vd 0.7). Dùng `Signal` hiện có (1 TP) — KHÔNG đụng value_objects.
 
@@ -56,8 +56,8 @@ dependencies: [1]
 
 - Create: `src/pocketquant/core/domain/strategy/services/engulfing.py` — `EngulfingStrategy(IStrategy)`.
 - Modify: `src/pocketquant/core/domain/strategy/services/__init__.py` — import + `"engulfing": EngulfingStrategy` vào `STRATEGY_REGISTRY` + `__all__`.
-- Create: `tests/core_test/unit/domain/strategy/test_engulfing.py` — unit (entry long/short, filter pass/fail, TP=max(rr,key), SL buffer, position cap, on_order_filled reset, direction long-only/short-only). Tái dùng helper `_bar`/`_strategy` style của `test_hitnrun2.py`.
-- Create: `tests/backtest_test/engine/test_engulfing_backtest.py` — integration full stack (synthetic bars → trades → metrics), mô phỏng theo `test_hitnrun2_backtest.py`.
+- Create: `tests/core_test/unit/domain/strategy/test_engulfing.py` — unit (entry long/short, filter pass/fail, TP=max(rr,key), SL buffer, position cap, on_order_filled reset, direction long-only/short-only).
+- Create: `tests/backtest_test/engine/test_engulfing_backtest.py` — integration full stack (synthetic bars → trades → metrics).
 - Reference (KHÔNG sửa): `core/domain/strategy/value_objects.py` (Signal 1 TP), `paper_broker.py` (auto-fill).
 
 ## Implementation Steps

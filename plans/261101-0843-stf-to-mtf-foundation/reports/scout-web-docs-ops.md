@@ -70,7 +70,7 @@ Freshness inputs for the mockup's per-interval column (the mockup marks it [assu
 - Compare route `routes/backtest_.compare.tsx` (`?runs=a,b,c`, `:9-17`).
 - `backtest-result-view.tsx:25,32`: backtest chart indicators default `engulfing: false`.
 - Backend: `RunBacktestCommand` (`engine/backtest/backtest_command_service.py:17-33`, `interval: str`, `parameters: dict | None`). `BacktestConfig` dataclass (`core/domain/backtest/config.py:10-24`, `interval: str`, `parameters: dict`). The `backtest_runs` document stores top-level `symbol`, `interval`, `parameters`, `config_snapshot` (`core/domain/backtest/entities.py:59-75`). List route `GET /api/v1/backtest/strategy/{strategy_id}?symbol=&interval=` (`app/routes/backtest.py:158-197`). Index `ix_backtests_strategy_symbol_interval_started` (`backtest_repository.py:125-128`). Query `query["interval"] = interval` (`:50-51`).
-- Bruno: `tests/http/backtest/run-backtest.bru:14-16` and `list-results.bru:13` use `hitnrun2` and `interval`.
+- Bruno: `tests/http/backtest/run-backtest.bru:14-16` and `list-results.bru:13` use `interval`.
 - Tests: no web test covers backtest components.
 
 ## 3. Engulfing mirror comment and golden fixture
@@ -81,7 +81,7 @@ Freshness inputs for the mockup's per-interval column (the mockup marks it [assu
 - Web fixture: `web/src/lib/indicators/__fixtures__/engulfing_golden_fixture.json`. Web test: `engulfing.test.ts` (`describe('detectEngulfing golden-fixture parity')`, `:22-31`).
 - Python fixture (separate copy): `tests/core_test/unit/domain/strategy/patterns/engulfing_golden_fixture.json`. Python test: `tests/core_test/unit/domain/strategy/patterns/test_engulfing_detector.py` (header `:1-2` "Python half of the cross-runtime lock", `_FIXTURE` `:13`).
 - Web consumers of the overlay: `engulfingMarkers` in `strategy-chart.tsx:22,182-192` and `trading-chart.tsx:25,353-364`. The toggle is `controls/indicator-toggles.tsx:9` (label `Engulf`). `IndicatorConfig.engulfing` is at `types/market-data.ts:151`. Defaults: `routes/index.tsx:32` (true), `strategies-page-layout.tsx:31` (true), `backtest-result-view.tsx:32` (false). `STRONG_THRESHOLD` lives in `engulfing.ts`, and `docs/swing-pivot-key-level.md:15` names it.
-- Other STF test files (backend scout owns them): `tests/backtest_test/engine/test_{engulfing,engulfing_pullback30_touch,hitnrun2}_backtest.py`, `tests/core_test/unit/domain/strategy/test_{engulfing,engulfing_pullback30_touch,hitnrun2}.py`.
+- Other STF test files (backend scout owns them): `tests/backtest_test/engine/test_{engulfing,engulfing_pullback30_touch}_backtest.py`, `tests/core_test/unit/domain/strategy/test_{engulfing,engulfing_pullback30_touch}.py`.
 
 ## 4. Chart: interval switcher, overlays
 
@@ -139,7 +139,7 @@ Other doc lines bound to STF or to the single-interval subscription:
 - `docs/code-standards.md:93` — "`subscription_id` is the UUIDv7 of one `(strategy_code, symbol, interval)` binding."
 - `docs/code-standards.md:95` — "The only duplicate guard … is the unique index `ix_subscriptions_dedup_triple` … `add_symbol` upper-cases `symbol` …". The index name and the triple both change with `intervals`.
 - `docs/swing-pivot-key-level.md:1-16` — the whole file is about the engulfing strategy: `engulfing_strategy_service.py` (`:3`), "held by the engulfing strategy itself" (`:7`), `EngulfingStrategyService.on_bar_completed` and its gates (`:13`), the strategy's `max_rejection_wick_pct` (`:15-16`). No doc links to it (grep). [INFERENCE] After the STF deletion only the overlay-related facts survive (marker ≠ entry no longer applies; `STRONG_THRESHOLD` is a web constant). Per the documentation rules the file is deleted or cut. Deleting a doc needs no new-file approval; adding one does (`documentation-rules.md:52`).
-- Requested grep `git grep -n -i -E "SL/TP only|sl/tp-only|one take-profit|hitnrun2|engulfing|interval" -- docs README.md CLAUDE.md` (excluding journals): 14 hits. Besides the lines above: `README.md:59,63,64` and `docs/deployment.md:224` are market-data sync examples with `"interval"` (unaffected). `hitnrun2` appears in no doc. `CLAUDE.md` has no hit.
+- Requested grep `git grep -n -i -E "SL/TP only|sl/tp-only|one take-profit|engulfing|interval" -- docs README.md CLAUDE.md` (excluding journals): 14 hits. Besides the lines above: `README.md:59,63,64` and `docs/deployment.md:224` are market-data sync examples with `"interval"` (unaffected). `CLAUDE.md` has no hit.
 - `docs/deployment.md:124` ("restores each open direction from the open positions (`StrategyAppService.take_over`)") holds for one position per subscription. [INFERENCE] Pending stop orders are not restored by that path; check it when pending orders land.
 - Tracked root `TODO.md`, `question.md`, `questions.md` are outside the documentation-rules scope (`documentation-rules.md:7`). `questions.md:9` mentions `engulfing:true` defaults.
 
@@ -186,7 +186,7 @@ Collections and the link to a subscription / strategy (repositories in `src/pock
 | `backtest_orders` | `COLLECTION_BACKTEST_ORDERS` (`constants.py:13`) | `run_id`, `strategy_code` (`core/domain/order/records.py:18-21,39-40`) | `ix_btorders_run_id`, `ix_btorders_strategy_code_status` (`backtest_order_repository.py:54-57`) |
 | `backtest_trades` | `COLLECTION_BACKTEST_TRADES` (`constants.py:14`) | `run_id`, `strategy_code` | `ix_bttrades_run_id`, `ix_bttrades_strategy_code_direction` (`backtest_trade_repository.py:177-180`) |
 
-- [INFERENCE] STF delete filter: `S = subscriptions.find({strategy_code: {$in: [hitnrun2, engulfing, engulfing_pullback30_touch]}})._id`. Then delete `positions.subscription_id ∈ S`, `orders.subscription_id ∈ S`, `trades.run_id ∈ S`, and `backtest_runs|backtest_orders|backtest_trades.strategy_code ∈ STF`. Also count `positions/orders/trades` whose subscription id is in no subscription document (orphans) and show them to the owner separately. The advice's Prod checks counted 234 positions, 241+18 orders, 215 trades and 21 backtest runs, but did not count `backtest_orders`/`backtest_trades`.
+- [INFERENCE] STF delete filter: `S = subscriptions.find({strategy_code: {$in: [engulfing, engulfing_pullback30_touch]}})._id`. Then delete `positions.subscription_id ∈ S`, `orders.subscription_id ∈ S`, `trades.run_id ∈ S`, and `backtest_runs|backtest_orders|backtest_trades.strategy_code ∈ STF`. Also count `positions/orders/trades` whose subscription id is in no subscription document (orphans) and show them to the owner separately. The advice's Prod checks counted 234 positions, 241+18 orders, 215 trades and 21 backtest runs, but did not count `backtest_orders`/`backtest_trades`.
 - `TrackedSymbolService.remove` cascades every collection above by symbol (`tracked_symbols_service.py:93-100,120-137`). Never use it (advice).
 - Unique index change: [INFERENCE] prod already holds `ix_subscriptions_dedup_triple` on the old keys, so the index rename or drop must be planned in the deploy step (see finding 8).
 

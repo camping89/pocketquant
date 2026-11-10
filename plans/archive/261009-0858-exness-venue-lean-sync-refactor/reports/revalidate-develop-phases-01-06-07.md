@@ -45,7 +45,7 @@ Develop facts:
 | Task | Class | Notes |
 |---|---|---|
 | T7.1 | VALID | `default_broker: Literal["paper","okx"]` (`core/config.py:140`) |
-| T7.2 | VALID, names stale | `IBrokerPort` (`core/domain/brokers/broker_port.py:13`, abstract :21-106 incl. `subscribe_trades`/`unsubscribe_trades` :92/:104); `IStrategyService` (`strategy_service_interface.py:21`); `HitNRun2StrategyService` (`core/domain/strategy/services/hitnrun2_strategy_service.py:44`); `normalize_quantity` may reduce to min/max-lot clamp via `ContractSpec` |
+| T7.2 | VALID, names stale | `IBrokerPort` (`core/domain/brokers/broker_port.py:13`, abstract :21-106 incl. `subscribe_trades`/`unsubscribe_trades` :92/:104); `IStrategyService` (`strategy_service_interface.py:21`); `normalize_quantity` may reduce to min/max-lot clamp via `ContractSpec` |
 | T7.3 | VALID, paths stale | `engine/strategy/strategy_app_service.py`, `engine/execution/order_app_service.py`, `engine/execution/position_app_service.py` |
 | T7.4/T7.5 | RESHAPE | must implement trade subscription emitting `TradeClosedEvent` (`engine/live/live_trade_collector.py:20-29`); `OrderResult.commission` (`value_objects.py:23`); fixtures missing |
 | T7.6 | VALID, blocked | fixtures |

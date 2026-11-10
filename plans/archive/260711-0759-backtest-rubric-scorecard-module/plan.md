@@ -29,7 +29,6 @@ Deferred roadmap (DSR/PBO/CSCV): [`../../docs/todo/deflated-sharpe-pbo-cscv-road
 - **DRY reuse** `PerformanceCalculatorDomainService` (`core/domain/trading/`) cho metric đã có (Sharpe/Sortino/maxDD/profit_factor/…); chỉ viết mới phần thiếu.
 - **PSR dùng `math.erf`** cho normal CDF Φ — KHÔNG thêm scipy (chưa có trong venv). `Φ(x)=0.5·(1+erf(x/√2))`.
 - **Params thật từ AST** (`config_snapshot.parameters = {}` mọi run) — parse `_DEFAULTS` + geometry từ strategy service file, resolve qua `STRATEGY_REGISTRY[code].__module__`.
-- **Dedup**: `hitnrun2` `019f1780-546f`/`6b52` metrics identical (double-persist race) → gộp, đánh dấu, không đếm 2 lần.
 - **MCPT signal-permutation HOÃN** (cần replay engine, đắt) → round này chỉ **bootstrap trade-order** (rẻ, numpy) + PSR.
 - **Threshold ngành** (Calmar>1/>3, Ulcer<5/>10, MAR>1, SQN 2–3/>3, PSR>0.95, cost-to-edge>1, MFE-capture>75%, MAE-to-stop 0.6–0.85) + **crypto-1m caveat** in trong output header.
 - **`rubric_version` versioned** trong scoring — đổi threshold/weight ⇒ bump version, persist theo version.
@@ -62,13 +61,13 @@ Deferred roadmap (DSR/PBO/CSCV): [`../../docs/todo/deflated-sharpe-pbo-cscv-road
 
 - [x] `uv run python scripts/rubric/run_rubric.py --all-finished` → 4 artifact vào `docs/backtest-rubric/` (comparison `.md` + per-run scorecards `.md` + `.json` + `.html`) cho 6 finished run, **dedup còn 5 distinct**.
 - [x] Mỗi run: 3 grade trục + tổng; mọi điểm truy về 1 metric + 1 threshold (không có điểm "mờ").
-- [x] Reconciliation `engulfing_pullback30_touch` (`019f36d2`) khớp master-report: planned R:R mean ~1.71 (master ~1.57), realized R-multiple −0.039 (âm, master ~−0.05), win_rate 42.9% exact, mae_to_stop 0.90 (SL quá chật). `hitnrun2` gross +5.46 bps nhưng net −1.54 (cost-killed, cost_to_edge 0.78); `engulfing` gross ≈ 0 (no-edge) — rubric phân biệt được 2 bệnh.
+- [x] Reconciliation `engulfing_pullback30_touch` (`019f36d2`) khớp master-report: planned R:R mean ~1.71 (master ~1.57), realized R-multiple −0.039 (âm, master ~−0.05), win_rate 42.9% exact, mae_to_stop 0.90 (SL quá chật). `engulfing` gross ≈ 0 (no-edge).
 - [x] `--persist` off mặc định; on → field `scorecard` upsert idempotent theo `rubric_version` (single `$set`), KHÔNG đụng `verdict`/`metrics`/`equity_curve`. `--dry-run` override `--persist`.
 - [x] HTML self-contained (inline CSS/JS, mở file:// đọc được), có crypto-1m caveat header.
 - [x] `docs/backtest-rubric/methodology.md` tồn tại, threshold table khớp `THRESHOLDS` code, header có `RUBRIC_VERSION`.
 - [x] Overall grade = weakest-axis (min 3 trục); test robustness=F + performance=A → overall ≤ D.
 - [x] `ruff` + `pyright` clean trên `scripts/rubric/`.
-- [x] Unit test dưới `tests/scripts/rubric/` (69 test) cho metric math (PSR, Ulcer, Calmar, SQN, bootstrap sequencing-only) + AST audit 3 strategy + renderers + dedup; pure math (không cần DB — connection lazy). Chạy cần override `MONGODB_URL` local (conftest prod-guard chặn khi direnv nạp prod URL).
+- [x] Unit test dưới `tests/scripts/rubric/` (69 test) cho metric math (PSR, Ulcer, Calmar, SQN, bootstrap sequencing-only) + AST audit 2 strategy + renderers + dedup; pure math (không cần DB — connection lazy). Chạy cần override `MONGODB_URL` local (conftest prod-guard chặn khi direnv nạp prod URL).
 
 ## Constraints (CLAUDE.md)
 

@@ -24,7 +24,6 @@ Date 2026-10-20 (Asia/Bangkok). Inputs: `kongming-261020-1924-debate-synthesis.m
 ## Facts found while rewriting
 - The adapter's `below_min_lot` log carries no subscription id; the plan uses the strategy service's `order_quantity_below_broker_minimum strategy_id=<id>` line and the durable `orders` rows instead. The pause rejection log gains `subscription_id` and `symbol` in Phase 05.
 - Positions use `is_closed`, not `closed_at: null`; the plan uses `is_closed`.
-- hitnrun2 citations: `max_loss_pct` at `:38`, the SL clamp at `:103` (the synthesis said `:37,:102`).
 - On 2026-10-20 `pocketquant-config` showed `M vps/default/.env` with an empty diff [I: line endings or file mode]; Phase 08 shows `git status --short` in its config [ASK].
 - The existing adapter test already pins "EXNESS_DAILY_LOSS_CAP not set" (`test_exness_broker_adapter.py:205`); Phase 05 keeps it and adds the `max_lots=None` case.
 

@@ -35,7 +35,7 @@ Size: ~+22 / −12 src, ~110 test lines.
 **4. Behaviour changes**
 
 - Live paper: SL/TP and LIMIT fills on 1m only; signal bar never closes its own position; gaps fill at open (CME reopen ≈ 7690.4 not 7681.31). MTM still runs on every finest bar (coarse closes on the same tick are equal).
-- Backtests: identical for non-gap, non-signal-bar bars. Changed: gap-open exits, signal-bar exits, and LIMITs that filled against their own submit bar (only `entry_type="limit"`; default market). Possible expectation changes: `test_engulfing_backtest.py`, `test_engulfing_pullback30_touch_backtest.py`, `test_hitnrun2_backtest.py`, `test_r7_worked_example_defaults.py` — diffs must be traced to one of the three rules.
+- Backtests: identical for non-gap, non-signal-bar bars. Changed: gap-open exits, signal-bar exits, and LIMITs that filled against their own submit bar (only `entry_type="limit"`; default market). Possible expectation changes: `test_engulfing_backtest.py`, `test_engulfing_pullback30_touch_backtest.py`, `test_r7_worked_example_defaults.py` — diffs must be traced to one of the three rules.
 - Unit broker tests: expected unchanged (helper bars open at mid or exactly at SL; orders are submitted before their bar event is built).
 
 **5. Risks**

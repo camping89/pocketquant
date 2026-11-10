@@ -26,7 +26,7 @@ R7 là hàng cuối track logic/config của initiative (chi tiết: `plans/trad
 
 - **`.env` đè code default:** `.env` có `PAPER_INITIAL_BALANCE=100000` → phải sửa cả `.env`, không thì local run vẫn 100k dù code đổi.
 - **Commission backtest vẫn 10 bps** ở 3 nơi (`config.py`, `command_service.py`, `dispatch.py`); paper-live đã 4 bps (`paper_commission_percent=0.0004`, R3). Web backtest-form KHÔNG gửi `commission_bps`/`slippage_bps` → UI backtest ăn default backend ⇒ đổi 10→4 áp cho cả UI.
-- **Characterization tests** (engulfing/hitnrun2, `test_backtest_single_run_direct_task`, `test_result_collector_mark_to_market`) pin **explicit** `commission_bps`/`initial_capital`/`currency` ⇒ đổi default KHÔNG phá test hiện có.
+- **Characterization tests** (engulfing, `test_backtest_single_run_direct_task`, `test_result_collector_mark_to_market`) pin **explicit** `commission_bps`/`initial_capital`/`currency` ⇒ đổi default KHÔNG phá test hiện có.
 - **Currency = label thuần** (không phép tính phụ thuộc); duy nhất `test_result_collector_mark_to_market.py:56` dùng currency và đã là `"USD"`. OKX pin explicit `"USDT"` tại mọi call site → an toàn tách paper=USD / OKX=USDT.
 - **Web frontend** không surface currency/initial_balance default (chỉ dùng `BTCUSDT` như ví dụ symbol) → KHÔNG đụng `web/`.
 - **Futures balance model xác nhận** (`paper_broker_adapter.py:595` `self._balance -= commission`; balance đổi theo realized-pnl delta khi reduce): entry chỉ trừ commission (không trừ notional) → tái hiện chính xác worked-example §6.

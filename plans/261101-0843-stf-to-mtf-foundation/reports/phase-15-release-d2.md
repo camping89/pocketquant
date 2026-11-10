@@ -35,13 +35,11 @@ Pre-check output:
 
 ```
 7.0.45
-019ebe98-209c-71f2-af3d-981810e2d783 hitnrun2 BTCUSDT:BINANCE '1m' datetime False
 019f0e9b-b206-76b6-b14f-23ab958c1c4e engulfing BTCUSDT:BINANCE '1m' datetime False
-01a15754-39ed-73e3-921e-df085eb4a786 hitnrun2 XAUUSD:EXNESS '1m' datetime False
 01a15754-3ab5-7258-b46b-ad98e1f3471f engulfing EURUSD:EXNESS '1h' datetime False
 ```
 
-Backup of all 4 subscription documents and the index list: local `.cache/subs-backup-261102.json` (git-ignored).
+Backup of all 2 subscription documents and the index list: local `.cache/subs-backup-261102.json` (git-ignored).
 
 ## Task 15.3 owner ASK
 
@@ -84,7 +82,7 @@ read_without_token=401
 ```
 
 - LIVECHK on the new trader: `trader_live=False`.
-- Trader log since `d2_pushed_at` (74 lines): `reconcile.failed` count `0`, `reconcile.unknown_template` count `4` (the 4 legacy subscriptions use the removed `hitnrun2` and `engulfing` codes).
+- Trader log since `d2_pushed_at` (74 lines): `reconcile.failed` count `0`, `reconcile.unknown_template` count `2` (the 2 legacy subscriptions use the removed `engulfing` code).
 - free_after: `Mem:            3905        2121         410           1        1374        1505`
 - `.cache/ssh/vps_key` removed.
 

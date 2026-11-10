@@ -1,22 +1,22 @@
 === FILE: plan.md ===
 ---
-title: "1m strategy evidence: Triple Screen 1m entry and a revived hitnrun2, gated backtests, paper reconciliation"
-description: "Backtest Triple Screen with a 1m entry screen and a revived hitnrun2 with a cost floor on 12 months of XAUUSD:EXNESS, gate each set on net profit_factor >= 1.2 and >= 100 trades, paper-test only passing sets for 14 days, reconcile against the backtest and write a pass/fail verdict per set."
+title: "1m strategy evidence: Triple Screen 1m entry, gated backtests, paper reconciliation"
+description: "Backtest Triple Screen with a 1m entry screen on 12 months of XAUUSD:EXNESS, gate each set on net profit_factor >= 1.2 and >= 100 trades, paper-test only passing sets for 14 days, reconcile against the backtest and write a pass/fail verdict per set."
 status: pending
 priority: P2
-effort: "about 1.5d hands-on + 6 backtest runs + 14 days paper"
+effort: "about 1.5d hands-on + 4 backtest runs + 14 days paper"
 branch: develop
-tags: [strategy, backtest, paper, 1m, triple-screen, hitnrun2, xauusd, exness]
+tags: [strategy, backtest, paper, 1m, triple-screen, xauusd, exness]
 blockedBy: []
 blocks: []
 created: 2026-11-09
 ---
 
-# 1m strategy evidence: Triple Screen 1m entry and a revived hitnrun2
+# 1m strategy evidence: Triple Screen 1m entry
 
 ## Overview
 
-The go-live plan is parked on "no profitable strategy yet". This plan produces 1m strategy evidence on `XAUUSD:EXNESS` with the owner's own gate. Track A backtests Triple Screen with a 1m entry screen and needs no code. Track B revives hitnrun2 on the current multi-interval contract with a cost floor, releases it and backtests it. Each set passes or fails on net `profit_factor >= 1.2` and `total_trades >= 100` over 12 months. Only passing sets run on paper, for 14 days, to reconcile with the backtest. The plan closes with one written verdict per set and moves to `plans/archive/`. A fail for every set is a valid, useful outcome.
+The go-live plan is parked on "no profitable strategy yet". This plan produces 1m strategy evidence on `XAUUSD:EXNESS` with the owner's own gate. The plan backtests Triple Screen with a 1m entry screen and needs no code. Each set passes or fails on net `profit_factor >= 1.2` and `total_trades >= 100` over 12 months. Only passing sets run on paper, for 14 days, to reconcile with the backtest. The plan closes with one written verdict per set and moves to `plans/archive/`. A fail for every set is a valid, useful outcome.
 
 The plan is written for a downstream executor model. Every phase carries tasks with Goal, Target files, Steps, Success criteria and a mechanical Verify, and ends with the same Failure Protocol block.
 
@@ -26,36 +26,27 @@ The plan is written for a downstream executor model. Every phase carries tasks w
 - Accepted advice: `plans/reports/advise-261109-1309-next-plan.md`; interview record `plans/reports/advise-261109-1309-next-plan-state.md`.
 - Format and ops exemplar: `plans/261101-0843-stf-to-mtf-foundation/phase-15-release-d2.md` (Ops lines, LIVECHK), `phase-16-backtests-and-paper-start.md` (run script, coverage check, run table, 1800 s ask), `phase-14-triple-screen.md` (strategy and test shape).
 - Governance: `docs/governance/no-look-ahead-rules.md`, `docs/governance/documentation-rules.md`. Code rules: `CLAUDE.md`, `docs/code-standards.md`. Deploy: `docs/deployment.md`.
-- Deleted hitnrun2: `git show f3bb9e64^:src/pocketquant/core/domain/strategy/services/hitnrun2_strategy_service.py` and `git show f3bb9e64^:tests/core_test/unit/domain/strategy/test_hitnrun2.py`.
 
 ## Owner decisions (interview 2026-11-09, recorded in English)
 
 | # | Decision |
 |---|---|
 | D1 | The plan produces 1m strategy evidence: backtest and forward paper test with a 1m entry screen. |
-| D2 | Both tracks. Track A: Triple Screen with a 1m entry screen, no code change, sets `1m,5m,15m` and `1m,15m,1h`. Track B: a dedicated 1m strategy. |
-| D3 | Track B revives hitnrun2 (240-bar breakout, 480-bar SL extreme, 60-bar TP extreme, max loss 1%, min profit 2%) on the current multi-interval contract, with a cost filter that skips entries whose exit distance cannot cover the round-trip cost. |
+| D2 | Triple Screen with a 1m entry screen, no code change, sets `1m,5m,15m` and `1m,15m,1h`. |
 | D4 | The backtest gate decides, per set: net `profit_factor >= 1.2` and `total_trades >= 100` over 12 months. Only passing sets go to paper. Paper runs 2 weeks per passing set, no profit threshold, only to reconcile with the backtest. |
 | D5 | The plan ends at the paper reconciliation and a written pass/fail verdict per set. Go-live and the two split-runtime bugs are out of scope. |
 
 ## Confirmed assumptions
 
-- A1: Track A runs 4 backtests: each set with `entry_type=stop, exit_mode=strategy` and with `entry_type=market, exit_mode=sl_tp`.
+- A1: The plan runs 4 backtests: each set with `entry_type=stop, exit_mode=strategy` and with `entry_type=market, exit_mode=sl_tp`.
 - A2: Costs come from the symbol's seeded spec (0.035 per oz per side, spread 0.08); no explicit cost is sent; runs go one at a time on prod; owner ask when a run exceeds 1800 s.
-- A3: hitnrun2 runs as one interval, `intervals=["1m"]`.
-- A4: The cost filter reads the cost from `config.contract_spec`, never a hard-coded 0.15.
 - A5: Paper reconciliation columns: trades per trading day, average commission per trade, exit-reason mix, zero `strategy_on_bar_error` / stale-bar events. Per-subscription trades are read by `trades.run_id`, because the paper account is pooled.
 - A6: The three existing Triple Screen paper subscriptions keep running and are not touched.
 
 ## Planning verdicts (fixed here; do not re-decide in a phase)
 
-- **P1 Window.** Every run uses one fixed window: `start_date=2025-11-07T00:00:00`, `end_date=2026-11-06T23:59:00` (12 months; stored 1m history starts 2025-10-21, `phase-16-backtests-and-paper-start.md` report line `first_1m=2025-10-21`). Track A and Track B are directly comparable.
-- **P2 Set and verdict.** A set is a strategy plus its interval list: `triple_screen 1m,5m,15m` (runs 1, 2), `triple_screen 1m,15m,1h` (runs 3, 4), `hitnrun2 1m` (runs 5, 6). A set passes when at least one of its runs meets the gate. Its paper subscription uses the passing run with the highest `profit_factor` (ties: more trades). Reason: the unique index `ix_subscriptions_dedup_intervals` on `(strategy_code, symbol, intervals_key)` allows one subscription per set (`src/pocketquant/core/infra/persistence/repositories/subscription_repository.py:129-132`). The verdict is the gate's. The paper reconciliation is recorded beside it and changes no verdict (D4: no paper threshold).
-- **P3 hitnrun2 runs.** Run 5 uses the defaults (`min_profit_pct=0.02`). Run 6 uses `min_profit_pct=0.002` (0.2 % of price, about 8 USD/oz near 4000 USD gold) as the "one lower value" from the advice. Every other parameter stays at its default, `min_cost_multiple=3.0` included.
-- **P4 Cost floor.** `floor = min_cost_multiple * (commission_per_contract * 2 / multiplier + spread)`, all from `config.contract_spec`; a `None` commission counts as 0. For the seeded gold spec (`multiplier=1.0`, `scripts/seed_exness_symbols.py:46-47`) this is the advice formula `commission_per_contract * 2 + spread` = 0.15. The division turns a per-contract fee into price units (`ContractSpec.multiplier` = currency per 1.0 of price per contract, `src/pocketquant/core/domain/symbol/value_objects.py:24-25`). An entry is skipped when the nearer of the TP and SL distances is below the floor.
-- **P5 Signed distances.** Distances run in the trade's favour (long: `tp - close`, `close - sl`). Fact from the old code: when the close also breaks the 480-bar extreme, `sl = max(480-bar low, close * 0.99)` lies above a long's entry (old test `test_long_entry_on_breakdown_below_prev_window_low`: entry 99.0, all prior lows 99.5, so SL 99.5). Such an entry has a negative SL distance, cannot cover any cost, and the floor skips it. Inference (unverified): part of the old 84.6 % win rate may come from such stops. The Track B backtest shows the effect.
-- **P6 hitnrun2 keeps the old entry sides.** Fact from the old code and tests: it goes LONG when the close breaks below the 240-bar low and SHORT when it breaks above the 240-bar high (a fade). The revival keeps this.
-- **P7 Interval.** hitnrun2 accepts exactly `intervals == ["1m"]` (A3); its lookbacks count 1m bars. Any other list is a 422 through `check_strategy_inputs`.
+- **P1 Window.** Every run uses one fixed window: `start_date=2025-11-07T00:00:00`, `end_date=2026-11-06T23:59:00` (12 months; stored 1m history starts 2025-10-21, `phase-16-backtests-and-paper-start.md` report line `first_1m=2025-10-21`).
+- **P2 Set and verdict.** A set is a strategy plus its interval list: `triple_screen 1m,5m,15m` (runs 1, 2), `triple_screen 1m,15m,1h` (runs 3, 4). A set passes when at least one of its runs meets the gate. Its paper subscription uses the passing run with the highest `profit_factor` (ties: more trades). Reason: the unique index `ix_subscriptions_dedup_intervals` on `(strategy_code, symbol, intervals_key)` allows one subscription per set (`src/pocketquant/core/infra/persistence/repositories/subscription_repository.py:129-132`). The verdict is the gate's. The paper reconciliation is recorded beside it and changes no verdict (D4: no paper threshold).
 - **P8 Run order.** Run 1 (`1m,5m,15m`, market, sl_tp) goes first: it has the most entry signals, as the 5m set did in Phase 16 (8516 trades, 234 s).
 
 ## Non-goals
@@ -64,19 +55,19 @@ Go-live Phases 11 and 12; `EXNESS_LIVE_TRADING`; the api `BROKER_DISABLED` check
 
 ## Conventions (every phase follows these)
 
-- **Run order.** The runner executes `phase-NN-*.md` in strict numeric order, one fresh worker per phase. File order is execution order. All phases are sequential; only Phase 03 edits repo code.
+- **Run order.** The runner executes `phase-NN-*.md` in strict numeric order, one fresh worker per phase. File order is execution order. All phases are sequential; no phase edits repo code.
 - **Working dir** `D:/w/_me/algotrading/pocketquant`, branch `develop`. Every Verify is one self-contained command run from there. The shell keeps no variables between commands. Times are UTC.
 - **Reports** go to `plans/261109-1349-1m-strategy-evidence/reports/phase-NN-<slug>.md`, where `<slug>` is the phase file's slug. Each phase ends its report with `Result: PASS` when every task passed, then commits the report (`docs(plans): record <what the phase did>`) and pushes `develop` with the Push recipe. `plans/**` is in the CI `paths-ignore` (`.github/workflows/cicd.yml:5-10`), so report commits run no CI.
 - **Entry gate (EG)** runs first in every phase: (1) `git status --porcelain -- src web deploy tests scripts docs .github` prints nothing; (2) after `git fetch -q origin`, `git rev-parse HEAD` equals `git rev-parse origin/develop`; (3) the previous phase report exists and its last line is `Result: PASS`; (4) the phase-specific lines. A resumed phase may show its own uncommitted task files and `HEAD` ahead of `origin/develop` by its own commits. A miss is not a failed verification: run `rm -f .cache/ssh/vps_key`, edit nothing, spawn no `kongming`, and end with exactly three lines: `Status: BLOCKED` / `NOT_YET: <reason>` / `Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-strategy-evidence --from NN after <UTC time>`. A resumed phase skips every task whose Verify already passes and never repeats a prod write whose recorded result exists.
 - **[ASK]** = stop and ask the owner in Vietnamese, leading with `Recommended: <reply>` and a one-line reason, then the facts. Only an explicit yes counts. "No" or "wait" ends the phase with the `NOT_YET` block. No approval carries forward. Record the answer in English in the report.
-- **Stop-and-ask points:** every `develop:master` push (Phase 04); any backtest run whose age or elapsed time passes 1800 s (Phases 02, 05); `StrategyConfig.contract_spec` not reaching the strategy in the backtest or trader path when fixing it needs an engine change (Phase 03); re-submitting a failed run; any destructive prod action; any change outside the confirmed scope.
+- **Stop-and-ask points:** any backtest run whose age or elapsed time passes 1800 s (Phase 02); re-submitting a failed run; any destructive prod action; any change outside the confirmed scope.
 - **Search** uses `git grep` (`rg` is not installed in Git Bash).
 - **GATES**: `uv run lint-imports` prints `Contracts: 6 kept, 0 broken.`; `uv run python scripts/code_metrics.py --ratchet` exits 0; `uv run ruff check src tests scripts` exits 0; `uv run pyright <touched .py files>` prints `0 errors`. If only the metric ratchet fails, raise its ceiling in `pyproject.toml` `[tool.code-metrics]` in its own commit `chore(metrics): raise the code metric ceiling` and say so in the report; never pad or split code to pass it.
 - **FULLSUITE**: run `docker ps`; if it fails start `"/c/Program Files/Docker/Docker/Docker Desktop.exe"` in the background and retry after 10 s. Then `uv run python -m pytest tests/ -q > .cache/pytest.txt 2>&1; tail -1 .cache/pytest.txt; grep -E "^(FAILED|ERROR) " .cache/pytest.txt | grep -v -E "test_utc_runtime_guard|test_cron_trigger_timezone" | wc -l`. Pass: the count prints `0` (the excluded modules are the known local timezone failures). Record the tail line. About 100 setup errors mean Docker is down, not a code failure.
 - **CLOSE** (end of the code phase): GATES and FULLSUITE pass; commit (conventional, English, no AI references); Push; then poll `GH_TOKEN=$(gh auth token --user camping89) gh run list --branch develop --limit 1 --json headSha,status,conclusion` every 60 s until `status` is `completed`. Pass: `conclusion` is `success` and `headSha` equals `git rev-parse HEAD`.
 - **No plan ids**, phase numbers, decision codes or finding codes in code, comments, test names, log events or commit messages.
 - **Code** follows `CLAUDE.md`: no docstrings (a WHY goes in a `#` comment), a flow reads in one file, at most two hops to I/O, no new class/flag/param/helper without a real caller today, UUIDv7 ids, repositories only in `core.infra.persistence.repositories`, fastapi only in app, log level by frequency.
-- **Prod** is read-only except the planned backtest runs (Phases 02, 05), the release (Phase 04) and the paper subscription creates and starts (Phase 06). Live stays disarmed. Secrets never go on a command line, into a report or into the repo.
+- **Prod** is read-only except the planned backtest runs (Phase 02) and the paper subscription creates and starts (Phase 06). Live stays disarmed. Secrets never go on a command line, into a report or into the repo.
 
 ## Recipes (phases cite these by name)
 
@@ -107,8 +98,6 @@ RUNS = {
     2: ("triple_screen", ["1m", "5m", "15m"], {"entry_type": "stop", "exit_mode": "strategy"}),
     3: ("triple_screen", ["1m", "15m", "1h"], {"entry_type": "market", "exit_mode": "sl_tp"}),
     4: ("triple_screen", ["1m", "15m", "1h"], {"entry_type": "stop", "exit_mode": "strategy"}),
-    5: ("hitnrun2", ["1m"], {}),
-    6: ("hitnrun2", ["1m"], {"min_profit_pct": 0.002}),
 }
 START = "2025-11-07T00:00:00"
 END = "2026-11-06T23:59:00"
@@ -158,7 +147,7 @@ print(
 
   No `spread`, `commission_bps` or commission key is sent: the backtest takes the spread from the symbol spec when the run sets none (`src/pocketquant/engine/backtest/backtest_execution_service.py:43`) and a per-contract commission wins over bps (`src/pocketquant/core/domain/trading/commission_model.py:25-28`, fed from the spec at `backtest_sandbox_app_service.py:93-95`). `profit_factor` is already net of commission (`src/pocketquant/core/domain/trading/performance_calculator_domain_service.py:198-217`).
 
-- **VERDICT**: the local script `.cache/verdict.py`, run as `uv run python .cache/verdict.py "<set>" <report files...>`. It is the one gate implementation for both tracks:
+- **VERDICT**: the local script `.cache/verdict.py`, run as `uv run python .cache/verdict.py "<set>" <report files...>`. It is the one gate implementation:
 
 ```python
 import re
@@ -167,7 +156,6 @@ import sys
 SETS = {
     "triple_screen 1m,5m,15m": (1, 2),
     "triple_screen 1m,15m,1h": (3, 4),
-    "hitnrun2 1m": (5, 6),
 }
 LINE = re.compile(r"^run=(\d) id=(\S+) status=finished elapsed_s=\d+ trades=(\d+) return=\S+ pf=(\S+) ")
 runs = {}
@@ -190,8 +178,7 @@ print(f"verdict: {name} {'pass' if passing else 'fail'} {detail} paper_run={pape
 
 ## Data flows
 
-- **Backtest (both tracks).** BTRUN in the `api` container posts `RunBacktestCommand` to `POST /api/v1/backtest/run` (`src/pocketquant/app/routes/backtest.py:48-60`). `BacktestCommandService.run` validates through `check_strategy_inputs` and stores a `started` doc (`src/pocketquant/engine/backtest/backtest_command_service.py:52-70`). `BacktestExecutionService.run` reads the symbol's `ContractSpec` (`backtest_execution_service.py:101-102`), puts it on `StrategyConfig.contract_spec` (`:111-119`) and on the paper broker (`:124-130`), replays stored 1m bars and preloads the higher intervals once. Results land in `backtest_runs` and `backtest_trades` (`run_id` = run id). BTRUN polls `GET /api/v1/backtest/{id}`; the report line feeds VERDICT, which prints one `verdict:` line per set.
-- **Cost floor (Track B).** `HitNRun2StrategyService.on_bar_completed` reads `self.config.contract_spec` on every decision; the same object comes from the symbol in both paths (backtest `:118`; trader `src/pocketquant/engine/live/strategy_reconcile_app_service.py:154-177`, wired with the real `SymbolLookupHelper` at `src/pocketquant/app/di/services.py:164-171`).
+- **Backtest.** BTRUN in the `api` container posts `RunBacktestCommand` to `POST /api/v1/backtest/run` (`src/pocketquant/app/routes/backtest.py:48-60`). `BacktestCommandService.run` validates through `check_strategy_inputs` and stores a `started` doc (`src/pocketquant/engine/backtest/backtest_command_service.py:52-70`). `BacktestExecutionService.run` reads the symbol's `ContractSpec` (`backtest_execution_service.py:101-102`), puts it on `StrategyConfig.contract_spec` (`:111-119`) and on the paper broker (`:124-130`), replays stored 1m bars and preloads the higher intervals once. Results land in `backtest_runs` and `backtest_trades` (`run_id` = run id). BTRUN polls `GET /api/v1/backtest/{id}`; the report line feeds VERDICT, which prints one `verdict:` line per set.
 - **Paper.** The `paper_run=<n>:<id>` of a passing verdict names a backtest run. PAPER reads that run's `strategy_code`, `intervals`, `parameters` from `backtest_runs` and creates and starts one `broker=paper` subscription with exactly those. The trader's reconcile loop loads it with the symbol spec; its closed trades land in `trades` with `run_id` = subscription id (`src/pocketquant/engine/live/live_trade_collector.py:39`). Engine errors and stale skips go to the trader log (`src/pocketquant/engine/strategy/strategy_app_service.py:623,631-649`). Phase 07 counts them per subscription from the logs and reads trades by `run_id`.
 
 ## Phases
@@ -199,38 +186,29 @@ print(f"verdict: {name} {'pass' if passing else 'fail'} {detail} paper_run={pape
 | # | Phase | Prod writes | Depends on | Status |
 |---|---|---|---|---|
 | 01 | [Commit the plan; A6 baseline; 1m coverage and cost spec check](./phase-01-data-coverage.md) | none | — | Pending |
-| 02 | [Track A: four Triple Screen 1m backtests, table, verdicts](./phase-02-triple-screen-1m-backtests.md) | 4 backtest runs | 01 | Pending |
-| 03 | [Track B: revive hitnrun2 with the cost floor; tests; CI](./phase-03-hitnrun2-revival.md) | none | 02 | Pending |
-| 04 | [Track B: release to master and post-deploy checks](./phase-04-release-hitnrun2.md) | release [ASK] | 03 | Pending |
-| 05 | [Track B: two hitnrun2 backtests, table, verdict](./phase-05-hitnrun2-backtests.md) | 2 backtest runs | 04 | Pending |
-| 06 | [Paper: one subscription per passing set](./phase-06-paper-start.md) | subscription creates and starts | 02, 05 | Pending |
+| 02 | [Four Triple Screen 1m backtests, table, verdicts](./phase-02-triple-screen-1m-backtests.md) | 4 backtest runs | 01 | Pending |
+| 06 | [Paper: one subscription per passing set](./phase-06-paper-start.md) | subscription creates and starts | 02 | Pending |
 | 07 | [Paper: 14 days of log check-ins and the reconciliation](./phase-07-paper-reconcile.md) | none | 06 | Pending |
 | 08 | [Close: verdicts in plan.md, completed, archive](./phase-08-close-and-archive.md) | none | 07 | Pending |
 
-Phase 03 starts only after Phase 02 has numbers (advice: Track A first). Phase 06 needs every verdict, so Track A paper waits for Track B; this keeps one paper start and one reconciliation.
+Phase 06 needs every verdict; this keeps one paper start and one reconciliation.
 
 ## Acceptance criteria
 
 | # | Criterion | Measured by |
 |---|---|---|
-| AC1 | Every run finished and is in a table with `profit_factor` and `total_trades` | Phase 02 and 05 Verify: 4 + 2 `status=finished` lines and table rows |
-| AC2 | One verdict line per set (3 sets) | `grep -c "^verdict: " plans/archive/261109-1349-1m-strategy-evidence/plan.md` prints `3` |
-| AC3 | hitnrun2 on master with `intervals=["1m"]` and a `min_cost_multiple` floor reading `config.contract_spec` | Phase 03 tests; Phase 04 master CI `completed success`; prod `strategies=hitnrun2,triple_screen params=7 min_cost_multiple=3.0` |
-| AC4 | A unit test proves the floor skips an entry whose nearer exit is under `min_cost_multiple` round-trip costs and takes it otherwise | Phase 03 Task 03.2 tests pass |
+| AC1 | Every run finished and is in a table with `profit_factor` and `total_trades` | Phase 02 Verify: 4 `status=finished` lines and table rows |
+| AC2 | One verdict line per set (2 sets) | `grep -c "^verdict: " plans/archive/261109-1349-1m-strategy-evidence/plan.md` prints `2` |
 | AC5 | One paper subscription per passing set, at least 14 days, with the four A5 columns | Phase 07 `reconcile_backtest:`, `reconcile_paper:`, `reconcile_errors:` lines per set |
-| AC6 | The three original subscriptions are untouched | ORIG3 equals the Phase 01 baseline in Phases 04, 06, 08 |
-| AC7 | Live stays disarmed | LIVECHK `trader_live=False` in Phase 04 |
+| AC6 | The three original subscriptions are untouched | ORIG3 equals the Phase 01 baseline in Phases 06, 08 |
 | AC8 | Plan closed and archived | `test -d plans/archive/261109-1349-1m-strategy-evidence` and `status: completed` |
 
 ## Test matrix
 
 | Level | What | Where |
 |---|---|---|
-| Unit | hitnrun2 entry rules, SL/TP formulas, cost floor (spec and multiple), signed distance, one position at a time, fill and rejection state, 1m-only check through `check_strategy_inputs` | `tests/core_test/unit/domain/strategy/test_hitnrun2.py` (new) |
-| Integration | hitnrun2 through the real backtest path and Mongo: trades when costs fit; zero trades when the symbol spec makes the floor exceed every exit | `tests/backtest_test/engine/test_hitnrun2_backtest.py` (new) |
 | Integration (existing) | spec reaches the backtest config and broker; reconcile loads the symbol spec | `tests/backtest_test/test_backtest_dispatch_contract_spec.py`, `tests/engine_test/test_contract_spec_wiring.py` |
-| Suite | FULLSUITE, GATES, CI on `develop` and `master` | Phases 03, 04 |
-| End to end | 6 prod backtests; paper subscriptions trading live 1m bars for 14 days | Phases 02, 05, 06, 07 |
+| End to end | 4 prod backtests; paper subscriptions trading live 1m bars for 14 days | Phases 02, 06, 07 |
 
 ## Risks
 
@@ -238,29 +216,24 @@ Phase 03 starts only after Phase 02 has numbers (advice: Track A first). Phase 0
 |---|---|---|---|
 | R1 | A 1m run takes over 1800 s and loads the shared Mongo pool while three paper subscriptions trade | M x M | One run at a time, WINDOW guard, FREE after each run, [ASK] once a run passes 1800 s |
 | R2 | 1m or cascaded bars have holes in the window | L x H | Phase 01 coverage check stops the plan before any run |
-| R3 | Signed distances skip many old hitnrun2 entries (inverted stops) | H x L | P5 is explicit, tested, and listed under Unresolved for the owner |
 | R4 | Trader log rotation (`max-size 10m`, `max-file 3`, `deploy/compose.prod.yml:16-20`) or a container recreate loses error lines inside the 14 days | M x M | Check-ins at most every 3 days; each one proves the oldest kept log line is not later than its `since` |
 | R5 | 1m paper entries hit the 10 s stale limit (`_STALE_AFTER_S["1m"]`, `strategy_app_service.py:53`) | M x L | Counted in the reconciliation as recorded; no fix in scope |
 | R6 | Single window and best-of-two selection overstate an edge | H x M | Accepted by the owner (DSR/PBO deferred); stated in the verdict section |
-| R7 | The release breaks prod | L x H | CI tests, deploy verify job, ORIG3 and LIVECHK after deploy, rollback recipe in Phase 04 |
 | R8 | No set passes | H x L | A valid result: Phases 06-07 record `paper_sets=none` and the plan closes with fail verdicts |
 
 ## Rollback (per phase)
 
-01, 02, 05, 07: no repo or prod state to undo (backtest runs stay; the owner can delete them in the UI). 03: `git revert <sha>` on `develop`, Push. 04: [ASK] then `git revert <sha> && git push` to master per `docs/deployment.md` "Rollback", or the emergency `IMAGE_TAG=sha-<prev_master>` pin. 06: [ASK] then stop and delete only the new subscriptions (never the three originals). 08: `git mv` the folder back and restore `status`.
+01, 02, 07: no repo or prod state to undo (backtest runs stay; the owner can delete them in the UI). 06: [ASK] then stop and delete only the new subscriptions (never the three originals). 08: `git mv` the folder back and restore `status`.
 
 ## Backwards compatibility and docs impact
 
-The change adds one registry entry and one strategy file. No schema, index, route, config key or migration changes; Triple Screen and the existing subscriptions are untouched; the web is strategy-agnostic (Phase 03 checks that no `hitnrun` name enters `web/src`, `app` or `engine`). Docs impact: none. `git grep -n -i "hitnrun\|triple.screen" -- docs README.md CLAUDE.md` printed nothing on 2026-11-09, so no doc names strategies, and the registry owns the list (`docs/governance/documentation-rules.md`, Line Test rule 1). The completed MTF plan's A2 grep ("no hitnrun2") is a closed record; D3 supersedes it.
+The plan changes no repo code: no schema, index, route, config key or migration changes; Triple Screen and the existing subscriptions are untouched. Docs impact: none.
 
 ## Unresolved questions
 
-1. P5: signed distances skip every hitnrun2 entry whose stop lies past its entry price, which the old code produced. If the owner prefers the old behaviour, change only the distance formula before Phase 03.
-2. P3: the lower `min_profit_pct` is 0.002, a planner value. The owner may name another before Phase 05.
-3. P2: a set passes when either of its runs passes, because only one subscription per set can exist.
-4. The new paper subscriptions keep running after the plan closes unless the owner says otherwise.
-5. Phase 01 accepts 1m calendar coverage from 98.00 % (D16 measured 98.33 % over 2025-11-03..2026-10-31 and the owner accepted the gaps as venue closures).
-6. [UNVERIFIED] A backtest with zero trades finishes with `status=finished`; the empty-list guards in `performance_calculator_domain_service.py:140-148` suggest it, and Task 03.4 proves it.
+1. P2: a set passes when either of its runs passes, because only one subscription per set can exist.
+2. The new paper subscriptions keep running after the plan closes unless the owner says otherwise.
+3. Phase 01 accepts 1m calendar coverage from 98.00 % (D16 measured 98.33 % over 2025-11-03..2026-10-31 and the owner accepted the gaps as venue closures).
 
 ## Failure Protocol (copied verbatim into every phase file)
 
@@ -292,7 +265,7 @@ dependencies: []
 
 ## Goal
 
-The plan is on `origin/develop`, the state of the three original subscriptions is recorded, and the 12-month window (P1) has full 1m and cascaded `5m`, `15m`, `1h` coverage with the seeded gold costs in place, so the Track A runs compare like with like.
+The plan is on `origin/develop`, the state of the three original subscriptions is recorded, and the 12-month window (P1) has full 1m and cascaded `5m`, `15m`, `1h` coverage with the seeded gold costs in place, so the runs compare like with like.
 
 ## Context
 
@@ -447,14 +420,14 @@ failure evidence to the user. Never continue by self-reasoning.
 === FILE: phase-02-triple-screen-1m-backtests.md ===
 ---
 phase: 2
-title: "Track A: four Triple Screen 1m backtests, table, verdicts"
+title: "Four Triple Screen 1m backtests, table, verdicts"
 status: pending
 priority: P2
 effort: "about 2h wall time (estimate 20-25 min per run)"
 dependencies: [1]
 ---
 
-# Phase 02: Track A: four Triple Screen 1m backtests, table, verdicts
+# Phase 02: Four Triple Screen 1m backtests, table, verdicts
 
 ## Goal
 
@@ -527,7 +500,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 
 ### Task 02.3 — Report and push
 
-**Goal:** the Track A evidence is in git before any Track B code starts.
+**Goal:** the backtest evidence is in git.
 
 **Target files and symbols:** `reports/phase-02-triple-screen-1m-backtests.md`.
 
@@ -559,566 +532,6 @@ Apply kongming's guidance, then re-run the Verify step.
 If `kongming` cannot be spawned in this environment, STOP and report the same
 failure evidence to the user. Never continue by self-reasoning.
 
-=== FILE: phase-03-hitnrun2-revival.md ===
----
-phase: 3
-title: "Track B: revive hitnrun2 with the cost floor; tests; CI"
-status: pending
-priority: P2
-effort: "1d"
-dependencies: [2]
----
-
-# Phase 03: Track B: revive hitnrun2 with the cost floor; tests; CI
-
-## Goal
-
-hitnrun2 lives again as `HitNRun2StrategyService` on the current contract with `intervals=["1m"]`, a `min_cost_multiple` floor read from `config.contract_spec`, unit tests and a backtest-path test, registered as `"hitnrun2"`, with CI green on `develop`.
-
-## Context
-
-- Old code: `git show f3bb9e64^:src/pocketquant/core/domain/strategy/services/hitnrun2_strategy_service.py` (lines 15-22 defaults, 55-96 decision, 98-107 fill and rejection). Old tests: `git show f3bb9e64^:tests/core_test/unit/domain/strategy/test_hitnrun2.py`. Old shape that no longer exists: `StrategyConfig(interval=...)`, module-level `_DEFAULTS`, `bar.get("timestamp") or datetime.now(UTC)`.
-- Current contract: `IStrategyService` with `DEFAULTS: ClassVar[dict]`, `restore_direction`, `snapshot` (`src/pocketquant/core/domain/strategy/strategy_service_interface.py:16-48`); `StrategyConfig.intervals`, `contract_spec` (`src/pocketquant/core/domain/strategy/value_objects.py:32-42`); `Signal` (`value_objects.py:10-29`). Model: `triple_screen_strategy_service.py`.
-- `check_strategy_inputs` type-checks every parameter against its `DEFAULTS` value and turns a constructor `ValueError` into a 422 `INVALID_PARAMETERS` (`services/__init__.py:50-73`); it builds the class with `LINEAR_SPEC`, so the constructor must not need a spec.
-- Engine facts the strategy relies on: warm-up replays up to 500 stored bars (`_WARMUP_BARS`, `strategy_app_service.py:55`), so the 480-bar window is full at start; every warm-up signal gets `on_order_rejected("warmup")` (`:321`) and then `restore_direction` from the open position (`:332`); a single-interval config skips context reads (`_refresh_context`, `:366-368`); `_decide` sets `bar["context"]` (`:424`) but this strategy never reads it, so no higher-timeframe look-ahead is possible.
-- ContractSpec units: `multiplier` = currency per 1.0 of price per contract; `commission_per_contract` may be `None` (`src/pocketquant/core/domain/symbol/value_objects.py:22-33`).
-- Planning verdicts P4-P7 (plan.md) fix the floor, the signed distances, the entry sides and the interval rule.
-- Test shape: `tests/core_test/unit/domain/strategy/test_triple_screen.py`, `tests/backtest_test/engine/test_triple_screen_backtest.py` (real Mongo through testcontainers, `tests/backtest_test/conftest.py:13-55`; Docker must run).
-- The completed MTF plan's acceptance A2 ("no hitnrun2 in src") is a closed record; owner decision D3 supersedes it.
-
-## Entry gate
-
-1. Conventions EG (1)-(3); the previous report is `reports/phase-02-triple-screen-1m-backtests.md`.
-2. `grep -c "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-triple-screen-1m-backtests.md` prints `2`.
-3. `docker ps > /dev/null 2>&1 && echo docker-ok` prints `docker-ok` (start Docker Desktop per FULLSUITE and retry once).
-
-On a miss, edit nothing and end with exactly:
-```
-Status: BLOCKED
-NOT_YET: <gate line and its output>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-strategy-evidence --from 03 after <UTC time>
-```
-
-## Files
-
-- Create: `src/pocketquant/core/domain/strategy/services/hitnrun2_strategy_service.py`, `tests/core_test/unit/domain/strategy/test_hitnrun2.py`, `tests/backtest_test/engine/test_hitnrun2_backtest.py`.
-- Modify: `src/pocketquant/core/domain/strategy/services/__init__.py`.
-- Delete: none. Prod writes: none.
-
-## Tasks
-
-### Task 03.1 — The symbol spec reaches the strategy in both paths
-
-**Goal:** confirm, before writing the floor, that `StrategyConfig.contract_spec` is the symbol's spec in the backtest and the trader path.
-
-**Target files and symbols:** `BacktestExecutionService.run` (`src/pocketquant/engine/backtest/backtest_execution_service.py:101-130`); `StrategyReconcileAppService` load (`src/pocketquant/engine/live/strategy_reconcile_app_service.py:154-177`).
-
-**Steps:**
-1. `git grep -n "contract_spec=config.contract_spec" -- src/pocketquant/engine/backtest/backtest_execution_service.py | wc -l` (expected `2`: the `StrategyConfig` and the broker).
-2. `git grep -n "contract_spec=contract_spec" -- src/pocketquant/engine/live/strategy_reconcile_app_service.py | wc -l` (expected `1`).
-3. `uv run python -m pytest tests/backtest_test/test_backtest_dispatch_contract_spec.py tests/engine_test/test_contract_spec_wiring.py -q 2>&1 | tail -1`.
-4. If step 1 or 2 differs from its expected count, or step 3 fails, [ASK] (intent): "The strategy does not receive the symbol's contract_spec in <path>; fixing it needs an engine change outside the confirmed scope. Allow the change?" `Recommended: no, stop the plan here`, reason: the scope excludes engine changes. A non-yes ends with `NOT_YET`.
-
-**Success criteria:** both paths set the spec from the symbol; the existing wiring tests pass.
-
-**Verify:** `git grep -n "contract_spec=config.contract_spec" -- src/pocketquant/engine/backtest/backtest_execution_service.py | wc -l; git grep -n "contract_spec=contract_spec" -- src/pocketquant/engine/live/strategy_reconcile_app_service.py | wc -l; uv run python -m pytest tests/backtest_test/test_backtest_dispatch_contract_spec.py tests/engine_test/test_contract_spec_wiring.py -q 2>&1 | tail -1` prints `2`, then `1`, then a line containing `passed` and neither `failed` nor `error`.
-
-### Task 03.2 — Unit tests first
-
-**Goal:** the rules are pinned before the class exists.
-
-**Target files and symbols:** `tests/core_test/unit/domain/strategy/test_hitnrun2.py`.
-
-**Steps:**
-1. Helpers (no docstrings):
-   - `GOLD = ContractSpec(commission_per_contract=0.035, spread=0.08)` (floor 0.45 at the default multiple 3.0).
-   - `SMALL = {"entry_lookback_bars": 5, "sl_lookback_bars": 8, "tp_lookback_bars": 3, "max_loss_pct": 0.01, "min_profit_pct": 0.001}`.
-   - `_cfg(spec=GOLD, intervals=("1m",), **params)` returns `StrategyConfig(id="sub-1", name="hitnrun2", symbol="XAUUSD:EXNESS", intervals=list(intervals), parameters={**SMALL, **params}, contract_spec=spec)`.
-   - `_bar(i, h, lo, c)` returns `{"symbol": "XAUUSD:EXNESS", "interval": "1m", "open": c, "high": h, "low": lo, "close": c, "volume": 1.0, "timestamp": datetime(2026, 1, 5, tzinfo=UTC) + timedelta(minutes=i)}`.
-   - `async def _warm(s, lows=(99.5, 98.0, 99.5, 99.5, 99.5, 99.5, 99.5, 99.5), highs=(100.5,) * 8)`: calls `await s.on_start()` then feeds bars 0-7 with close `100.0` and asserts each returns `None`.
-   - `LONG = (99.6, 98.9, 99.0)` and `SHORT = (101.1, 100.4, 101.0)` as `(h, lo, c)` of bar 8; `_fill(side)` returns `SimpleNamespace(side=OrderSide[side])`.
-2. Tests (names state the rule; numbers checked by hand: long entry 99.0, SL `max(98.0, 99.0 * 0.99) = 98.01`, TP `max(100.5, 99.099) = 100.5`, nearer distance 0.99):
-   - `test_two_intervals_are_rejected`: `_cfg(intervals=("1m", "5m"))` raises `ValueError`.
-   - `test_an_entry_interval_other_than_1m_is_rejected`: `("5m",)` raises `ValueError`.
-   - `test_an_unknown_direction_is_rejected`: `direction="up"` raises `ValueError`.
-   - `test_the_check_accepts_1m_and_rejects_5m`: `check_strategy_inputs("hitnrun2", ["1m"], {}) is HitNRun2StrategyService`; `check_strategy_inputs("hitnrun2", ["5m"], {})` raises `DomainError` with `error_code == "INVALID_PARAMETERS"` and `status_code == 422`.
-   - `test_warming_up_sends_nothing`: during `_warm`, the last snapshot has `decision == {"action": "skip", "reason": "warming up"}`.
-   - `test_a_close_below_the_entry_window_low_goes_long`: bar 8 = `LONG` gives `Direction.LONG`, `entry_price == 99.0`, `stop_loss_price == pytest.approx(98.01)` (the 1 % cap wins over the 98.0 window low), `take_profit_price == pytest.approx(100.5)`, `entry_type == "market"`, `entry_logic == "hitnrun2:enter_long"`.
-   - `test_a_close_above_the_entry_window_high_goes_short`: `_warm(s, lows=(99.5,) * 8, highs=(100.5, 102.0, 100.5, 100.5, 100.5, 100.5, 100.5, 100.5))`, bar 8 = `SHORT` gives `Direction.SHORT`, `stop_loss_price == pytest.approx(102.0)`, `take_profit_price == pytest.approx(99.5)`.
-   - `test_the_take_profit_is_at_least_min_profit_pct`: `min_profit_pct=0.02`, bar 8 = `LONG` gives `take_profit_price == pytest.approx(100.98)`.
-   - `test_the_cost_floor_takes_an_entry_whose_nearer_exit_covers_it`: same as the long test with `GOLD` (0.99 >= 0.45); `snapshot["readings"] == [{"interval": "1m", "name": "nearer_exit_distance", "value": pytest.approx(0.99), "ok": True}]`.
-   - `test_the_cost_floor_reads_the_symbol_spec`: `spec=ContractSpec(commission_per_contract=0.2)` (floor 1.2), bar 8 = `LONG` returns `None` and `decision == {"action": "skip", "reason": "exit distance under the cost floor"}`.
-   - `test_the_cost_floor_scales_with_min_cost_multiple`: `GOLD`, `min_cost_multiple=10.0` (floor 1.5), bar 8 = `LONG` returns `None` with the same decision.
-   - `test_an_entry_whose_stop_is_past_the_entry_price_is_skipped`: `spec=LINEAR_SPEC` (floor 0), `_warm(s, lows=(99.5,) * 8)`, bar 8 = `LONG` returns `None` (SL 99.5 above entry 99.0, distance -0.5) with reason `"exit distance under the cost floor"`.
-   - `test_a_long_only_strategy_ignores_a_short_setup`: `direction="long"`, short warm-up as above, bar 8 = `SHORT` returns `None`, `decision == {"action": "hold", "reason": "no breakout"}`.
-   - `test_one_position_at_a_time`: after the long signal, bar 9 `(98.95, 98.4, 98.5)` returns `None` with `decision == {"action": "hold", "reason": "position held"}`.
-   - `test_an_opposite_fill_frees_the_next_entry`: after the long signal, `await s.on_order_filled(_fill("SELL"), 98.01)`; bar 9 `(98.95, 98.4, 98.5)` gives `Direction.LONG` with `stop_loss_price == pytest.approx(98.0)` (nearer 0.5 >= 0.45).
-   - `test_a_same_side_fill_keeps_the_position`: after the long signal, `on_order_filled(_fill("BUY"), 99.0)`; bar 9 holds.
-   - `test_a_rejected_entry_frees_the_next_entry`: after the long signal, `await s.on_order_rejected("zero position size")`; bar 9 gives `Direction.LONG`.
-   - `test_a_restart_holds_no_position`: after the long signal, `_warm` again (it calls `on_start`); bar 8 = `LONG` gives `Direction.LONG`.
-3. Run `uv run python -m pytest tests/core_test/unit/domain/strategy/test_hitnrun2.py -q 2>&1 | tail -1`; expected red (an import error), because the module does not exist yet.
-
-**Success criteria:** the file exists and fails only because the strategy is missing.
-
-**Verify:** no verification needed (Task 03.3's Verify runs this file).
-
-### Task 03.3 — Strategy and registry entry
-
-**Goal:** `HitNRun2StrategyService` implements P4-P7 and is registered as `"hitnrun2"`.
-
-**Target files and symbols:** `hitnrun2_strategy_service.py` (`HitNRun2StrategyService`); `services/__init__.py` (`STRATEGY_REGISTRY`, `__all__`).
-
-**Steps:**
-1. Create the strategy file with exactly this content:
-```python
-from __future__ import annotations
-
-from collections import deque
-from typing import ClassVar
-
-from pocketquant.core.domain.order import OrderSide
-from pocketquant.core.domain.strategy.enums import Direction
-from pocketquant.core.domain.strategy.strategy_service_interface import (
-    FilledOrder,
-    IStrategyService,
-)
-from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
-
-
-class HitNRun2StrategyService(IStrategyService):
-    DEFAULTS: ClassVar[dict] = {
-        "entry_lookback_bars": 240,
-        "sl_lookback_bars": 480,
-        "tp_lookback_bars": 60,
-        "max_loss_pct": 0.01,
-        "min_profit_pct": 0.02,
-        "direction": "both",
-        "min_cost_multiple": 3.0,
-    }
-
-    def __init__(self, config: StrategyConfig) -> None:
-        super().__init__(config)
-        p = config.parameters or {}
-        d = self.DEFAULTS
-        self.entry_lookback_bars = p.get("entry_lookback_bars", d["entry_lookback_bars"])
-        self.sl_lookback_bars = p.get("sl_lookback_bars", d["sl_lookback_bars"])
-        self.tp_lookback_bars = p.get("tp_lookback_bars", d["tp_lookback_bars"])
-        self.max_loss_pct = float(p.get("max_loss_pct", d["max_loss_pct"]))
-        self.min_profit_pct = float(p.get("min_profit_pct", d["min_profit_pct"]))
-        self.direction = p.get("direction", d["direction"])
-        self.min_cost_multiple = float(p.get("min_cost_multiple", d["min_cost_multiple"]))
-        # The lookbacks count 1m bars.
-        if list(config.intervals) != ["1m"]:
-            raise ValueError("hitnrun2 runs on intervals ['1m'] only")
-        if self.direction not in ("long", "short", "both"):
-            raise ValueError(f"direction must be long|short|both, got {self.direction!r}")
-        lookbacks = (self.entry_lookback_bars, self.sl_lookback_bars, self.tp_lookback_bars)
-        if min(lookbacks) < 1:
-            raise ValueError("lookbacks must be >= 1")
-        if self.max_loss_pct <= 0 or self.min_profit_pct <= 0 or self.min_cost_multiple < 0:
-            raise ValueError("max_loss_pct and min_profit_pct must be above 0")
-        self._warm = max(lookbacks)
-        self._highs: deque[float] = deque(maxlen=self._warm)
-        self._lows: deque[float] = deque(maxlen=self._warm)
-
-    async def on_start(self) -> None:
-        await super().on_start()
-        self._highs.clear()
-        self._lows.clear()
-        self._open_direction = None
-
-    async def on_bar_completed(self, bar: dict) -> Signal | None:
-        high, low, close = float(bar["high"]), float(bar["low"]), float(bar["close"])
-        # The windows end at the previous bar, so a bar never sets its own breakout level.
-        highs, lows = list(self._highs), list(self._lows)
-        self._highs.append(high)
-        self._lows.append(low)
-        spec = self.config.contract_spec
-        # Commission is per contract and a contract moves `multiplier` per 1.0 of price, so
-        # this is the round trip in price units: two commissions plus one spread.
-        floor = self.min_cost_multiple * (
-            (spec.commission_per_contract or 0.0) * 2 / spec.multiplier + spec.spread
-        )
-        entry: tuple[Direction, float, float] | None = None
-        if len(lows) < self._warm:
-            action, reason = "skip", "warming up"
-        elif self._open_direction is not None:
-            action, reason = "hold", "position held"
-        else:
-            action, reason = "hold", "no breakout"
-            e = self.entry_lookback_bars
-            if self.direction != "short" and close < min(lows[-e:]):
-                sl = max(min(lows[-self.sl_lookback_bars :]), close * (1 - self.max_loss_pct))
-                tp = max(max(highs[-self.tp_lookback_bars :]), close * (1 + self.min_profit_pct))
-                entry = (Direction.LONG, sl, tp)
-            elif self.direction != "long" and close > max(highs[-e:]):
-                sl = min(max(highs[-self.sl_lookback_bars :]), close * (1 + self.max_loss_pct))
-                tp = min(min(lows[-self.tp_lookback_bars :]), close * (1 - self.min_profit_pct))
-                entry = (Direction.SHORT, sl, tp)
-
-        nearer: float | None = None
-        signal: Signal | None = None
-        if entry is not None:
-            direction, sl, tp = entry
-            sign = 1 if direction == Direction.LONG else -1
-            # Distances run in the trade's favour, so a stop past the entry price is negative
-            # and skips like any exit too close to pay the round trip.
-            nearer = min(sign * (tp - close), sign * (close - sl))
-            if nearer < floor:
-                action, reason = "skip", "exit distance under the cost floor"
-            else:
-                action = "enter_long" if sign == 1 else "enter_short"
-                reason = "close broke the entry window"
-                self._open_direction = direction
-                signal = Signal(
-                    symbol=self.config.symbol,
-                    direction=direction,
-                    confidence=0.7,
-                    timestamp=bar["timestamp"],
-                    subscription_id=self.id,
-                    entry_price=close,
-                    stop_loss_price=sl,
-                    take_profit_price=tp,
-                    entry_logic=f"hitnrun2:{action}",
-                )
-        self.snapshot = {
-            "readings": [
-                {
-                    "interval": "1m",
-                    "name": "nearer_exit_distance",
-                    "value": nearer,
-                    "ok": signal is not None,
-                }
-            ],
-            "decision": {"action": action, "reason": reason},
-        }
-        return signal
-
-    # The broker's SL or TP fill is the opposite side, so any opposite-side fill closes.
-    async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
-        if (self._open_direction == Direction.LONG and order.side == OrderSide.SELL) or (
-            self._open_direction == Direction.SHORT and order.side == OrderSide.BUY
-        ):
-            self._open_direction = None
-
-    # The only signal is a market entry, so any rejection means no position opened.
-    async def on_order_rejected(self, reason: str) -> None:
-        self._open_direction = None
-```
-2. In `services/__init__.py`: import `HitNRun2StrategyService` from `pocketquant.core.domain.strategy.services.hitnrun2_strategy_service` above the Triple Screen import; `STRATEGY_REGISTRY = {"hitnrun2": HitNRun2StrategyService, "triple_screen": TripleScreenStrategyService}`; add `"HitNRun2StrategyService"` to `__all__`.
-3. `uv run ruff check --fix src/pocketquant/core/domain/strategy/services tests/core_test/unit/domain/strategy/test_hitnrun2.py` and `uv run ruff format src/pocketquant/core/domain/strategy/services tests/core_test/unit/domain/strategy/test_hitnrun2.py`.
-
-**Success criteria:** every Task 03.2 test passes; the registry lists both codes.
-
-**Verify:** `uv run python -m pytest tests/core_test/unit/domain/strategy/test_hitnrun2.py -q 2>&1 | tail -1; uv run python -c "from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY; print(sorted(STRATEGY_REGISTRY))"` prints a line containing `passed` and neither `failed` nor `error`, then `['hitnrun2', 'triple_screen']`.
-
-### Task 03.4 — Backtest-path test over seeded Mongo
-
-**Goal:** hitnrun2 runs end to end through `BacktestCommandService` and `BacktestExecutionService`, and the floor sees the symbol spec the backtest hands it.
-
-**Target files and symbols:** `tests/backtest_test/engine/test_hitnrun2_backtest.py`.
-
-**Steps:**
-1. Copy the shape of `tests/backtest_test/engine/test_triple_screen_backtest.py` (autouse `_reset_sim_time`, `_cmd_svc`, `_clear_bars`, `try/finally`). Constants: `_SYM = "BTCUSDT:BINANCE"`, `_T0 = datetime(2026, 1, 1, tzinfo=UTC)`, `_PARAMS = {"entry_lookback_bars": 20, "sl_lookback_bars": 60, "tp_lookback_bars": 10, "min_profit_pct": 0.001}`.
-2. `_series()` builds 2 days of 1m `Bar`s (`2880`): `a = 3.0 if (k // 30) % 2 == 0 else 1.5`; `close = 100 + a * sin(2 * pi * k / 30)`; `open` = previous close (first: `100.0`); `high = max(open, close) + 0.05`; `low = min(open, close) - 0.05`; `volume=1.0`, `tick_count=1`, `interval=Interval("1m")`, `datetime=_T0 + k minutes`. The alternating trough depth keeps a deeper low inside the 60-bar stop window, so long entries at the shallow troughs have a positive stop distance (checked by a local simulation on 2026-11-09: positive nearer distances from about 0.05 to 1.02).
-3. `class _SpecLookup` with `__init__(self, spec)` and `async def contract_spec(self, composite: str) -> ContractSpec: return self.spec`. `_execution(database, spec)` builds `BacktestExecutionService(bar_repository=BarRepository(database), backtest_repository=..., backtest_order_repository=..., backtest_trade_repository=..., calendar_factory=TradingCalendarFactory(SymbolLookupHelper(SymbolRepository(database))), symbol_lookup=_SpecLookup(spec))`, with `# type: ignore[arg-type]` on `symbol_lookup` and a `#` comment above it: the run reads only `contract_spec` from the lookup (`backtest_execution_service.py:101` is its one use).
-4. Two tests, each seeding the bars, running `RunBacktestCommand(strategy_id="hitnrun2", symbol=_SYM, intervals=["1m"], start_date=_T0, end_date=_T0 + timedelta(days=2), slippage_bps=0, commission_bps=0, parameters=_PARAMS)` through `_cmd_svc(database).run(...)` and `_execution(database, spec).execute_and_persist(run_id, config)`, then reading `BacktestRepository(database).get(run_id)`:
-   - `test_hitnrun2_backtest_trades_when_the_exits_cover_the_costs`: `spec=LINEAR_SPEC`; asserts `status == "finished"` and `metrics.total_trades >= 1`.
-   - `test_hitnrun2_backtest_skips_every_entry_when_the_symbol_costs_exceed_the_exits`: `spec=ContractSpec(commission_per_contract=1.0)` (floor 6.0, above every exit distance); asserts `status == "finished"` and `metrics.total_trades == 0`.
-5. `uv run ruff check --fix` and `uv run ruff format` on the file.
-
-**Success criteria:** both cases pass; the second proves the spec reaches the floor through the backtest path.
-
-**Verify:** `uv run python -m pytest tests/backtest_test/engine/test_hitnrun2_backtest.py -q 2>&1 | tail -1` contains `2 passed` and neither `failed` nor `error`.
-
-### Task 03.5 — CLOSE
-
-**Goal:** gates hold, no strategy name leaks into platform or UI code, one commit, CI green.
-
-**Target files and symbols:** every file of this phase.
-
-**Steps:**
-1. `git grep -n -i "hitnrun" -- web/src src/pocketquant/app src/pocketquant/engine | wc -l` prints `0`.
-2. `uv run python -m pytest tests/core_test/unit/domain/strategy tests/backtest_test/engine -q 2>&1 | tail -1` contains `passed` and neither `failed` nor `error`.
-3. GATES with `uv run pyright src/pocketquant/core/domain/strategy/services tests/core_test/unit/domain/strategy/test_hitnrun2.py tests/backtest_test/engine/test_hitnrun2_backtest.py`; FULLSUITE.
-4. `git add` the four files; `git commit -m "feat(strategy): revive hitnrun2 on one 1m interval with a cost floor"`; Push; poll CI per CLOSE.
-5. Report: Task 03.1 outputs, the test tails, GATES and FULLSUITE lines, the commit sha, the CI run line, then `Result: PASS`. Commit it (`docs(plans): record the hitnrun2 revival`) and Push.
-
-**Success criteria:** CI `success` on the code commit.
-
-**Verify:** `GH_TOKEN=$(gh auth token --user camping89) gh run list --branch develop --workflow cicd.yml --limit 5 --json headSha,status,conclusion -q '.[] | "\(.status) \(.conclusion) \(.headSha)"' | grep -c "^completed success $(git log -1 --format=%H -- src tests)$"` prints `1`.
-
-## Rollback
-
-`git revert <code sha>` on `develop`, then Push. Nothing on prod changed.
-
-## Report
-
-`reports/phase-03-hitnrun2-revival.md`: entry-gate outputs; Task 03.1 outputs; test tails; GATES and FULLSUITE lines; commit sha; CI run id and conclusion; `Result: PASS`.
-
-## Failure Protocol
-If any Verify step does not meet its stated pass condition, STOP this phase.
-Do not improvise a fix, retry blindly, or reason around the failure.
-Spawn the `kongming` subagent for next-step counsel and pass:
-- the phase and task id,
-- what you attempted (the steps you ran),
-- the exact command and its full output,
-- the pass condition it failed to meet.
-Apply kongming's guidance, then re-run the Verify step.
-If `kongming` cannot be spawned in this environment, STOP and report the same
-failure evidence to the user. Never continue by self-reasoning.
-
-=== FILE: phase-04-release-hitnrun2.md ===
----
-phase: 4
-title: "Track B: release to master and post-deploy checks"
-status: pending
-priority: P2
-effort: "1h"
-dependencies: [3]
----
-
-# Phase 04: Track B: release to master and post-deploy checks
-
-## Goal
-
-Prod runs the commit with hitnrun2: `master` equals `develop`, the master pipeline (tests, build, deploy, verify) succeeds, the api lists hitnrun2 with its seven parameters, live stays off in the trader, and the three original subscriptions are unchanged.
-
-## Context
-
-- A release is `develop:master`, a fast-forward (`docs/deployment.md` "Branches"); the master push runs tests, builds, deploys and runs `deploy/vps/11-verify.sh` (`.github/workflows/cicd.yml:86-89,220-223`; `docs/deployment.md` "Verify": a green run needs no extra check). Every master push is an owner [ASK].
-- On 2026-11-09 `origin/master..origin/develop` held only `plans/` commits, so this release ships the hitnrun2 commit plus plan records.
-- Live off: LIVECHK must print `trader_live=False` before and after.
-- Public reads: `GET /api/v1/backtest/strategies` (`src/pocketquant/app/routes/backtest.py:41-43`), `GET /api/v1/strategies/{code}` returning `parameters = DEFAULTS` (`src/pocketquant/engine/strategy/strategy_query_service.py:34-42`).
-- Recipes: plan.md KEY, SSH, COMPOSE, PRODPY, HEADER, ORIG3, LIVECHK, FREE, Push.
-
-## Entry gate
-
-1. Conventions EG (1)-(3); the previous report is `reports/phase-03-hitnrun2-revival.md`.
-2. `git fetch -q origin && git log --oneline origin/master..origin/develop -- src | wc -l` prints a number `>= 1`.
-3. KEY, then LIVECHK prints `trader_live=False`.
-
-On a miss, run `rm -f .cache/ssh/vps_key`, edit nothing and end with exactly:
-```
-Status: BLOCKED
-NOT_YET: <gate line and its output>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-strategy-evidence --from 04 after <UTC time>
-```
-
-## Files
-
-- Repo: this phase's report only.
-- Prod writes: the release push (Task 04.3).
-
-## Tasks
-
-### Task 04.1 — Pre-release state
-
-**Goal:** the rollback tag, the memory baseline and the A6 state are recorded.
-
-**Target files and symbols:** `origin/master`; prod `subscriptions`.
-
-**Steps:**
-1. Record `prev_master=$(git rev-parse --short=7 origin/master)` (the printed sha).
-2. FREE `free_before`.
-3. PRODPY `orig3`; record its line.
-
-**Success criteria:** `prev_master=`, `free_before` and the ORIG3 line are in the report; the ORIG3 line equals the Phase 01 baseline.
-
-**Verify:** `uv run python -c "import re; a=open('plans/261109-1349-1m-strategy-evidence/reports/phase-01-data-coverage.md',encoding='utf-8').read(); b=open('plans/261109-1349-1m-strategy-evidence/reports/phase-04-release-hitnrun2.md',encoding='utf-8').read(); x=re.search(r'^baseline_(original_subs=\S+)$',a,re.M).group(1); print('orig3_same=' + ('yes' if re.search('^' + re.escape(x) + '$',b,re.M) else 'no'))"` prints `orig3_same=yes`.
-
-### Task 04.2 — [ASK] release
-
-**Goal:** the owner approves the release.
-
-**Target files and symbols:** none.
-
-**Steps:**
-1. Ask in Vietnamese (intent): "Release hitnrun2 to prod? It adds one strategy (`hitnrun2`, 1m only, cost floor from the symbol spec) and changes nothing else in the engine, schema or UI. Commits: `<git log --oneline origin/master..origin/develop | wc -l>`. Live stays off (`trader_live=False`). Rollback: revert and push, or pin `sha-<prev_master>`." Lead with `Recommended: yes`, reason: tests and CI are green and the change is one strategy file plus its registry line.
-2. Only an explicit yes continues; record the reply as `release_ask=<reply>`.
-
-**Success criteria:** the report holds the owner's yes.
-
-**Verify:** no verification needed (Task 04.3 runs only after the recorded yes).
-
-### Task 04.3 — Release push and master run
-
-**Goal:** `master` equals `develop` and the master run succeeds.
-
-**Target files and symbols:** `origin/master`.
-
-**Steps:**
-1. Record `released_at=<UTC ISO now>`.
-2. `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop:master && git fetch origin`; then `test "$(git rev-parse origin/master)" = "$(git rev-parse origin/develop)" && echo released` prints `released`.
-3. `sleep 15`, then poll `GH_TOKEN=$(gh auth token --user camping89) gh run list --branch master --limit 1 --json headSha,status,conclusion` every 60 s until `status` is `completed`.
-
-**Success criteria:** the master run concludes `success` on the released sha.
-
-**Verify:** `GH_TOKEN=$(gh auth token --user camping89) gh run list --branch master --limit 1 --json headSha,status,conclusion -q '.[0] | "\(.status) \(.conclusion) \(.headSha)"'` prints `completed success <sha>` with `<sha>` equal to `git rev-parse origin/master`.
-
-### Task 04.4 — Post-deploy checks
-
-**Goal:** prod serves hitnrun2, live is off, reconcile is clean and the original subscriptions are unchanged.
-
-**Target files and symbols:** api routes; trader container and log; prod `subscriptions`.
-
-**Steps:**
-1. PRODPY `post` with:
-```python
-import json
-import urllib.request
-names = json.load(urllib.request.urlopen("http://localhost:41921/api/v1/backtest/strategies"))
-p = json.load(urllib.request.urlopen("http://localhost:41921/api/v1/strategies/hitnrun2")).get("parameters") or {}
-print(f"strategies={','.join(sorted(names))} params={len(p)} min_cost_multiple={p.get('min_cost_multiple')}")
-```
-2. LIVECHK.
-3. SSH `cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env logs --since <released_at> trader 2>&1` piped locally to `sed 's/\x1b\[[0-9;]*m//g' > .cache/trader.log`; then `grep -c "reconcile.failed" .cache/trader.log`.
-4. PRODPY `orig3`; record its line.
-5. FREE `free_after`. `rm -f .cache/ssh/vps_key`.
-
-**Success criteria:** `strategies=hitnrun2,triple_screen params=7 min_cost_multiple=3.0`; `trader_live=False`; `reconcile.failed` count `0`; the ORIG3 line appears twice in this report with the same value as the baseline.
-
-**Verify:** the PRODPY `post` output is exactly `strategies=hitnrun2,triple_screen params=7 min_cost_multiple=3.0`; LIVECHK prints `trader_live=False`; `grep -c "reconcile.failed" .cache/trader.log` prints `0`; `uv run python -c "import re; a=open('plans/261109-1349-1m-strategy-evidence/reports/phase-01-data-coverage.md',encoding='utf-8').read(); b=open('plans/261109-1349-1m-strategy-evidence/reports/phase-04-release-hitnrun2.md',encoding='utf-8').read(); x=re.search(r'^baseline_(original_subs=\S+)$',a,re.M).group(1); o=re.findall(r'^original_subs=\S+$',b,re.M); print(f'orig3_lines={len(o)} same={sum(1 for l in o if l == x)}')"` prints `orig3_lines=2 same=2`.
-
-### Task 04.5 — Report and push
-
-**Goal:** the release record is in git.
-
-**Target files and symbols:** `reports/phase-04-release-hitnrun2.md`.
-
-**Steps:**
-1. End the report with `Result: PASS`; commit `docs(plans): record the hitnrun2 release`; Push.
-
-**Success criteria:** the report is on `origin/develop`.
-
-**Verify:** `git fetch -q origin && git show origin/develop:plans/261109-1349-1m-strategy-evidence/reports/phase-04-release-hitnrun2.md | tail -1` prints `Result: PASS`.
-
-## Rollback
-
-Each step is an [ASK]. Standard: `git revert <hitnrun2 sha>`, push `develop`, then push `develop:master` (the master CI redeploys). Emergency: SSH `cd /opt/pocketquant && IMAGE_TAG=sha-<prev_master> bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh` (`docs/deployment.md` "Rollback"). No data migration exists, so nothing else reverts. Record `free -m` after a rollback.
-
-## Report
-
-`reports/phase-04-release-hitnrun2.md`: entry-gate outputs (LIVECHK); `prev_master=`; `free_before`, `free_after`; ORIG3 lines; `release_ask=`; `released_at=`; the master run id and sha; post-check outputs; `Result: PASS`.
-
-## Failure Protocol
-If any Verify step does not meet its stated pass condition, STOP this phase.
-Do not improvise a fix, retry blindly, or reason around the failure.
-Spawn the `kongming` subagent for next-step counsel and pass:
-- the phase and task id,
-- what you attempted (the steps you ran),
-- the exact command and its full output,
-- the pass condition it failed to meet.
-Apply kongming's guidance, then re-run the Verify step.
-If `kongming` cannot be spawned in this environment, STOP and report the same
-failure evidence to the user. Never continue by self-reasoning.
-
-=== FILE: phase-05-hitnrun2-backtests.md ===
----
-phase: 5
-title: "Track B: two hitnrun2 backtests, table, verdict"
-status: pending
-priority: P2
-effort: "about 1h wall time"
-dependencies: [4]
----
-
-# Phase 05: Track B: two hitnrun2 backtests, table, verdict
-
-## Goal
-
-Two finished 12-month hitnrun2 backtests on the same window as Track A (P1): run 5 with the defaults and run 6 with `min_profit_pct=0.002` (P3), a table, and one `verdict:` line for the set `hitnrun2 1m` from the same VERDICT script Track A used.
-
-## Context
-
-- Runs 5 and 6 of BTRUN (plan.md); same cost source (A2), same WINDOW, FREE and 1800 s rules as Phase 02.
-- One interval: no higher-timeframe context is read (`strategy_app_service.py:366-368`), so the run should be shorter than a Triple Screen 1m run [UNVERIFIED until run 5 ends].
-- The first 480 bars of the window only warm the strategy up (8 hours of a 12-month window).
-- Recipes: plan.md KEY, SSH, PRODPY, BTRUN, VERDICT, WINDOW, FREE.
-
-## Entry gate
-
-1. Conventions EG (1)-(3); the previous report is `reports/phase-04-release-hitnrun2.md`.
-2. `grep -c "^strategies=hitnrun2,triple_screen params=7 min_cost_multiple=3.0$" plans/261109-1349-1m-strategy-evidence/reports/phase-04-release-hitnrun2.md` prints `1`.
-
-On a miss, run `rm -f .cache/ssh/vps_key`, edit nothing and end with exactly:
-```
-Status: BLOCKED
-NOT_YET: <gate line and its output>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-strategy-evidence --from 05 after <UTC time>
-```
-
-## Files
-
-- Repo: this phase's report only. Local scratch: `.cache/bt.py`, `.cache/verdict.py`.
-- Prod writes: two `backtest_runs` (Task 05.1).
-
-## Tasks
-
-### Task 05.1 — Two backtests, one at a time
-
-**Goal:** runs 5 and 6 finished, each followed by a `free -m` line; any run over 1800 s has an owner yes.
-
-**Target files and symbols:** `POST /api/v1/backtest/run`, `GET /api/v1/backtest/{run_id}`; `.cache/bt.py`.
-
-**Steps:**
-1. If `.cache/bt.py` is missing or differs from the BTRUN text in plan.md, write it from plan.md. KEY.
-2. For `n` in `5, 6`, in order, follow Phase 02 Task 02.1 step 2 (a-f) exactly, with this phase's report and `n` in place; the [ASK] text names `hitnrun2 1m <parameters>`.
-3. A `status=failed` line, or a started line with `age_s` above `10800`, is a failed Verify. Never re-submit without the owner's explicit yes.
-4. `rm -f .cache/ssh/vps_key`.
-
-**Success criteria:** two finished lines and two `free_after_run=` lines.
-
-**Verify:** `grep -c -E "^run=[5-6] id=\S+ status=finished " plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md; grep -c "^free_after_run=" plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md` prints `2` then `2`.
-
-### Task 05.2 — Run table and verdict line
-
-**Goal:** the set `hitnrun2 1m` has one gate verdict computed like Track A's.
-
-**Target files and symbols:** the phase report; `.cache/verdict.py`.
-
-**Steps:**
-1. Write the table with the Phase 02 header and one row per run (`| 5 | hitnrun2 | 1m | defaults | ...`, `| 6 | hitnrun2 | 1m | min_profit_pct=0.002 | ...`).
-2. If `.cache/verdict.py` is missing or differs from the VERDICT text in plan.md, write it from plan.md.
-3. Run `uv run python .cache/verdict.py "hitnrun2 1m" plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md`; append the printed line unchanged under the table.
-
-**Success criteria:** 2 table rows and 1 verdict line.
-
-**Verify:** `grep -c -E "^\| [5-6] \| hitnrun2 \| " plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md; grep -c -E "^verdict: hitnrun2 1m (pass|fail) " plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md` prints `2` then `1`.
-
-### Task 05.3 — Report and push
-
-**Goal:** the Track B evidence is in git.
-
-**Target files and symbols:** `reports/phase-05-hitnrun2-backtests.md`.
-
-**Steps:**
-1. End the report with `Result: PASS`; commit `docs(plans): record the hitnrun2 backtests`; Push.
-
-**Success criteria:** the report is on `origin/develop`.
-
-**Verify:** `git fetch -q origin && git show origin/develop:plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md | tail -1` prints `Result: PASS`.
-
-## Rollback
-
-None needed. The runs stay in `backtest_runs`; the owner can delete them in the UI.
-
-## Report
-
-`reports/phase-05-hitnrun2-backtests.md`: entry-gate outputs; every `run=` line; two `free_after_run=` lines; any `cost_ask=` answer; the table; the verdict line; `Result: PASS`.
-
-## Failure Protocol
-If any Verify step does not meet its stated pass condition, STOP this phase.
-Do not improvise a fix, retry blindly, or reason around the failure.
-Spawn the `kongming` subagent for next-step counsel and pass:
-- the phase and task id,
-- what you attempted (the steps you ran),
-- the exact command and its full output,
-- the pass condition it failed to meet.
-Apply kongming's guidance, then re-run the Verify step.
-If `kongming` cannot be spawned in this environment, STOP and report the same
-failure evidence to the user. Never continue by self-reasoning.
-
 === FILE: phase-06-paper-start.md ===
 ---
 phase: 6
@@ -1126,7 +539,7 @@ title: "Paper: one subscription per passing set"
 status: pending
 priority: P2
 effort: "0.5h"
-dependencies: [2, 5]
+dependencies: [2]
 ---
 
 # Phase 06: Paper: one subscription per passing set
@@ -1147,8 +560,8 @@ Every set whose verdict is `pass` has exactly one running paper subscription on 
 
 ## Entry gate
 
-1. Conventions EG (1)-(3); the previous report is `reports/phase-05-hitnrun2-backtests.md`.
-2. `grep -h -c "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-triple-screen-1m-backtests.md plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md` prints `2` then `1`.
+1. Conventions EG (1)-(3); the previous report is `reports/phase-02-triple-screen-1m-backtests.md`.
+2. `grep -h -c "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-triple-screen-1m-backtests.md` prints `2`.
 
 On a miss, run `rm -f .cache/ssh/vps_key`, edit nothing and end with exactly:
 ```
@@ -1168,10 +581,10 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 
 **Goal:** the report names the sets that go to paper and their backtest run ids.
 
-**Target files and symbols:** reports of Phases 02 and 05.
+**Target files and symbols:** the report of Phase 02.
 
 **Steps:**
-1. `grep -h "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-triple-screen-1m-backtests.md plans/261109-1349-1m-strategy-evidence/reports/phase-05-hitnrun2-backtests.md`; copy the three lines into this report.
+1. `grep -h "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-triple-screen-1m-backtests.md`; copy the two lines into this report.
 2. For each line with ` pass `, write `paper_set=<set> run=<id>` where `<id>` is the part after the colon in `paper_run=<n>:<id>`.
 3. If no line has ` pass `, write `paper_sets=none`, skip Tasks 06.2 and 06.3, and go to Task 06.4.
 
@@ -1268,7 +681,7 @@ print(f"ring={sys.argv[1]} entries={len(ring)} live_distinct_bar_start={len({e['
 
 ## Report
 
-`reports/phase-06-paper-start.md`: entry-gate outputs; the three verdict lines; `paper_set=` lines or `paper_sets=none`; `paper_started_at=`; per set the `paper_sub=` and `state=` lines; `paper_ready_at=`; `free_after_paper_start`; ring lines; the ORIG3 line; `Result: PASS`.
+`reports/phase-06-paper-start.md`: entry-gate outputs; the two verdict lines; `paper_set=` lines or `paper_sets=none`; `paper_started_at=`; per set the `paper_sub=` and `state=` lines; `paper_ready_at=`; `free_after_paper_start`; ring lines; the ORIG3 line; `Result: PASS`.
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.
@@ -1505,15 +918,15 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 **Target files and symbols:** `plan.md`, new section `## Verdicts` before `## Failure Protocol (copied verbatim into every phase file)`.
 
 **Steps:**
-1. Copy the three `verdict:` lines from the Phase 02 and 05 reports unchanged, one per line.
+1. Copy the two `verdict:` lines from the Phase 02 report unchanged, one per line.
 2. Under them, copy every `reconcile_backtest:`, `reconcile_paper:` and `reconcile_errors:` line from the Phase 07 report unchanged, and every `paper_sub=` line from the Phase 06 report; with no passing set write `No set passed the gate; no paper subscription was started.`
 3. Add one sentence: `The verdict is the backtest gate (net profit_factor >= 1.2 and total_trades >= 100 over 2025-11-07..2026-11-06); the paper lines are a record and change no verdict.`
 4. Add one sentence naming the result in words, built from the verdict lines only: either `Passing sets: <list>.` or `No 1m set passed the gate at the seeded XAUUSD:EXNESS costs.`
 5. Change the Phases table `Status` cells to `Completed`.
 
-**Success criteria:** plan.md holds three verdict lines.
+**Success criteria:** plan.md holds two verdict lines.
 
-**Verify:** `grep -c -E "^verdict: (triple_screen 1m,5m,15m|triple_screen 1m,15m,1h|hitnrun2 1m) (pass|fail) " plans/261109-1349-1m-strategy-evidence/plan.md` prints `3`.
+**Verify:** `grep -c -E "^verdict: (triple_screen 1m,5m,15m|triple_screen 1m,15m,1h) (pass|fail) " plans/261109-1349-1m-strategy-evidence/plan.md` prints `2`.
 
 ### Task 08.3 — Status completed and archive
 

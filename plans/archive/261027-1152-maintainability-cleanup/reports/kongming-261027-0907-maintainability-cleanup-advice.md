@@ -22,7 +22,7 @@ The decision is not "which of 19 proposals to accept" but "which few changes red
 2. **Log-level pass + `request_logging` DEBUG-only** (medium findings, proposal 9). 1-2 h. Pays on every prod incident because logs keep ~12 h and INFO noise currently crowds out `order_filled`/`integrity.issues_found`.
 3. **Fill-path safety** (high + event-bus medium + `_on_order_filled` boundary). 1-2 h with one test. Not a reading win; it removes the most expensive future debugging session (silent paper desync in live and in backtests).
 4. **`sync_jobs.py` one wrapper + per-symbol isolation** (proposal 2 plus the three sync lows). Half a day. This file is the first read in every market-data incident (journals: calendar bug, 04:00 stall, partial aggregates); six copies become one and both C901 hits drop.
-5. **Backtest chain 6→3** (proposal 3). Half a day to a day. The largest hop reduction in the repo; the hitnrun2/engulfing characterization tests (`tests/backtest_test/engine/`) are the safety net. Depends on decision 9 (the `run_single` import in `recompute_backtest_costs.py`).
+5. **Backtest chain 6→3** (proposal 3). Half a day to a day. The largest hop reduction in the repo; the engulfing characterization tests (`tests/backtest_test/engine/`) are the safety net. Depends on decision 9 (the `run_single` import in `recompute_backtest_costs.py`).
 6. **Dead live-execution surface + `risk_check` cleanup** (proposal 4). 2-3 h. Makes `order/position_app_service.py` and `risk_check.py` read as what they do today.
 7. **`EventRegistry` → explicit `bus.subscribe`** (proposal 6). About 1 h. Removes the one reflection trap (`_`-prefix scan) from the live wiring; subscriptions become greppable.
 8. **`main_extensions.py`** (proposal 8): take only the free parts (dead `JobScheduler` methods go in item 1, `_cancel`, one `enable_jobs` gate, duplicate `set_container`). Move `/system/jobs` only if you are already in the file.
@@ -82,7 +82,7 @@ Nothing new. Two zero-cost habits already in your rules: lower both ratchet ceil
 ## 6. What I would not do, and what the reviews overstated
 
 - **Not touch `exness_broker_adapter.py`** (no proposal needs it; the go-live plan cites its lines and Phase 11 is re-runnable).
-- **Not deploy per batch**; three deploys, each resets paper warmup (hitnrun2 ~8 h, engulfing ~21 h per the plan).
+- **Not deploy per batch**; three deploys, each resets paper warmup (engulfing ~21 h per the plan).
 - **Not refactor `sync_jobs.py` while the 04:00 stall fix is in flight** — do the wrapper first so the stall fix lands on a smaller file.
 - **Not do proposals 12, 13, 15 (beyond two deletions), the paper-broker builders, or the `components/strategy/` move now.**
 - Overstated: the high finding's "after a live fill" — on Exness the mechanism and symptom differ (verified `_notify` isolation); the tick-lock medium is a 50 ms paper stall today; `spa_fallback` is dev-only; "`/trading/*` Bruno files not validated" — they exist under `tests/http`, so the surface has a manual caller, which is why decision 5 is yours; the 2.5-3.5k LOC headline is 60 percent OKX, and reading time comes from the hop reductions (batches 5 and 6), not from LOC.

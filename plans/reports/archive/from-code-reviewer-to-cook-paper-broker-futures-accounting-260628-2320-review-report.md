@@ -38,7 +38,7 @@ Plan: `plans/260628-2013-paper-broker-futures-accounting/`
 ## Findings
 
 ### High (latent, not active for current strategies)
-- **`_can_afford` can block a losing short-cover under futures** — paper_broker.py:441-444 + callsites 200/262/612. A short-cover is `OrderSide.BUY`, so it routes through `_can_afford` (`fill_price*qty <= _balance`). Under the old spot model opening a short credited `_balance`, masking this; under futures `_balance` stays at initial, so covering a short at a price where `notional > _balance` (a loss, or any qty*price above balance) gets REJECTED → position stuck open. NOT triggered today: engulfing + hitnrun2 close shorts ONLY via broker SL/TP (`_fire_synthetic_exit`, line 683), which bypasses `_can_afford`. Risk activates only if a future strategy emits an explicit opposite-side BUY to close a short. Plan red-team (C3/C7) consciously deferred the `_can_afford` rewrite to keep scope tight — defensible, but the latent trap should be tracked (a one-line guard: skip the affordability check when the BUY reduces/covers an existing short).
+- **`_can_afford` can block a losing short-cover under futures** — paper_broker.py:441-444 + callsites 200/262/612. A short-cover is `OrderSide.BUY`, so it routes through `_can_afford` (`fill_price*qty <= _balance`). Under the old spot model opening a short credited `_balance`, masking this; under futures `_balance` stays at initial, so covering a short at a price where `notional > _balance` (a loss, or any qty*price above balance) gets REJECTED → position stuck open. NOT triggered today: engulfing closes shorts ONLY via broker SL/TP (`_fire_synthetic_exit`, line 683), which bypasses `_can_afford`. Risk activates only if a future strategy emits an explicit opposite-side BUY to close a short. Plan red-team (C3/C7) consciously deferred the `_can_afford` rewrite to keep scope tight — defensible, but the latent trap should be tracked (a one-line guard: skip the affordability check when the BUY reduces/covers an existing short).
 
 ### Low (non-blocking)
 - **Stale docstring** — `paper_broker_fills_characterization_test.py:6-10` still says MARKET "opens a LONG position, and debits balance". The futures change removed the debit; the test it describes now asserts no-debit. Docstring contradicts the assertion. Cosmetic.
@@ -56,6 +56,6 @@ Plan: `plans/260628-2013-paper-broker-futures-accounting/`
 Status: DONE_WITH_CONCERNS
 Summary: Accounting fix is correct, well-tested, and passes all gates (394 tests, ruff/pyright/import-linter clean). One latent High (`_can_afford` can block an explicit losing short-cover under futures — inert for current SL/TP-only strategies) plus a stale docstring and working-tree scope mixing.
 Concerns/Blockers:
-- High (latent): paper_broker.py:441-444 — `_can_afford` may reject explicit short-cover BUY when notional > `_balance`; not hit by engulfing/hitnrun2 (SL/TP exits bypass it).
+- High (latent): paper_broker.py:441-444 — `_can_afford` may reject explicit short-cover BUY when notional > `_balance`; not hit by engulfing (SL/TP exits bypass it).
 - Low: paper_broker_fills_characterization_test.py:6-10 stale "debits balance" docstring.
 - Low: working tree mixes unrelated engulfing changes; split before commit.

@@ -15,7 +15,7 @@ created: 2026-10-09
 # Exness venue + lean sync-policy refactor
 
 ## Overview
-Add Exness as a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`) after a balanced refactor: one `SyncPolicy` per provider consumed by one shared runner, three DI modules, two market-data route files, three import-linter contracts and a rewritten `docs/code-standards.md`. Binance, OKX, PaperBroker, `hitnrun2`, `engulfing` stay. MT5 is documented only; no MCP; no deployment-topology change. Source: advice report `D:/w/_me/algotrading/plans/reports/advise-261008-1148-exness-api-replacement.md` (sections 2, 5, 9).
+Add Exness as a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`) after a balanced refactor: one `SyncPolicy` per provider consumed by one shared runner, three DI modules, two market-data route files, three import-linter contracts and a rewritten `docs/code-standards.md`. Binance, OKX, PaperBroker, `engulfing` stay. MT5 is documented only; no MCP; no deployment-topology change. Source: advice report `D:/w/_me/algotrading/plans/reports/advise-261008-1148-exness-api-replacement.md` (sections 2, 5, 9).
 
 ## Goals
 - G1: Exness is a usable live venue alongside Binance/OKX (data, quotes, orders, positions).
@@ -50,7 +50,7 @@ Never print, log or commit key material.
 ## Success criteria (D1-D7, measurable)
 - D1 `POST /api/v1/market-data/sync` `{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000,"source":"bulk_sync_api"}` (real body: composite symbol, `source` required) → `status=="completed"`, `total_bars >= 1000`; `GET /api/v1/market-data/bars/stream/XAUUSD%3AEXNESS?interval=1m` emits `"is_in_progress": true` within 60 s in market hours; `GET /api/v1/quotes/stream/XAUUSD%3AEXNESS` emits a payload.
 - D2 One min-lot live order per strategy reaches `FILLED` via the events WS within 10 s of ACK and appears in `GET /api/v1/trading/positions`.
-- D3 `hitnrun2` and `engulfing` backtests on Exness bars persist to `backtest_runs` with non-empty trades; `PaperBroker` has `spread`.
+- D3 `engulfing` backtests on Exness bars persist to `backtest_runs` with non-empty trades; `PaperBroker` has `spread`.
 - D4 `engine/market_data/sync_internals/` absent; `app/di` holds `__init__.py` + 3 modules; market-data routes in 2 files; `scripts/code_metrics.py` reports `tiny_share<=30`, `pure_delegation<=20`.
 - D5 `docs/code-standards.md` rewritten, no stale status claims; `uv run lint-imports` → 3 contracts kept, 0 broken.
 - D6 Binance/OKX tests green; `just test`, `uv run ruff check`, `uv run pyright`, `uv run lint-imports` green; CI deploy green with `11-verify.sh` verdict `0 failures`.
@@ -1052,17 +1052,17 @@ Honest re-validation: PaperBroker `spread`, Exness backtests of both strategies,
 - Verify: gate met; verdict `0 failures`.
 
 ### T9.3 Backfill and backtests on Exness bars
-- Steps (prod, via ssh+curl as in phase 07): `POST /api/v1/market-data/sync` with `n_bars: 5000` for each of `XAUUSD`, `EURUSD`, `BTCUSD` `:EXNESS` × `1m` and `1h` (`source: "bulk_sync_api"`). Spread per instrument = typical spread from the phase-01 tick fixture (median `ask - bid`), recorded in the validation journal. Run `POST /api/v1/backtest/run` for `hitnrun2` on `XAUUSD:EXNESS` `1m` and `engulfing` on `XAUUSD:EXNESS` `1h`, `start_date`/`end_date` spanning the synced range, `spread` set, `slippage_bps: 0`, `commission_bps: 0`. Poll `GET /api/v1/backtest/{run_id}` until status is not `started`.
-- Success criteria: both runs persisted with non-empty trades.
+- Steps (prod, via ssh+curl as in phase 07): `POST /api/v1/market-data/sync` with `n_bars: 5000` for each of `XAUUSD`, `EURUSD`, `BTCUSD` `:EXNESS` × `1m` and `1h` (`source: "bulk_sync_api"`). Spread per instrument = typical spread from the phase-01 tick fixture (median `ask - bid`), recorded in the validation journal. Run `POST /api/v1/backtest/run` for `engulfing` on `XAUUSD:EXNESS` `1h`, `start_date`/`end_date` spanning the synced range, `spread` set, `slippage_bps: 0`, `commission_bps: 0`. Poll `GET /api/v1/backtest/{run_id}` until status is not `started`.
+- Success criteria: the run persisted with non-empty trades.
 - **Stop and ask** if a run completes with zero trades (do not change strategy parameters or date ranges on your own).
-- Verify: `GET /api/v1/backtest/{run_id}` status `completed` for both; `GET /api/v1/backtest/{run_id}/trades` returns ≥ 1 item for both.
+- Verify: `GET /api/v1/backtest/{run_id}` status `completed`; `GET /api/v1/backtest/{run_id}/trades` returns ≥ 1 item.
 
 ### T9.4 Live round trip per strategy (minimum lot, SL attached)
 - Steps:
   1. **Gate on user precondition 3**: ask the user to confirm the risk cap (minimum lot, SL always, daily loss cap %) and that prod env has `EXNESS_FORCE_MIN_LOT=true` and `EXNESS_DAILY_LOSS_CAP_PCT=<value>`. Wait for explicit yes.
   2. Check prod settings without printing secrets: `ssh ... "docker exec pocketquant-app python -c \"from pocketquant.core.config import get_settings as g; s=g(); print(s.exness_force_min_lot, s.exness_daily_loss_cap_pct)\""` prints `True <cap>`.
   3. **Stop and ask** if any planned order would exceed minimum lot or run without SL (guards make this impossible; if the check in step 2 prints `False`, stop).
-  4. Create subscriptions: `POST /api/v1/strategies/hitnrun2/subscriptions` `{"symbol":"XAUUSD:EXNESS","interval":"1m","broker":"exness"}` and `POST /api/v1/strategies/engulfing/subscriptions` `{"symbol":"XAUUSD:EXNESS","interval":"1h","broker":"exness"}`; response has `"broker":"exness"`. Start both. Do not restart the app while a position is open.
+  4. Create subscriptions: `POST /api/v1/strategies/engulfing/subscriptions` `{"symbol":"XAUUSD:EXNESS","interval":"1h","broker":"exness"}`; response has `"broker":"exness"`. Start it. Do not restart the app while a position is open.
   5. When each strategy has had one entry filled and then closed by SL/TP, stop its subscription (`POST /api/v1/subscriptions/{id}/stop`).
 - Success criteria: per strategy one order `FILLED` and one position visible, closed later by venue SL/TP.
 - Verify: `docker logs pocketquant-app | grep exness.order_filled` shows one line per strategy with `latency_ms` ≤ 10000; `GET /api/v1/trading/orders` contains each order with `status` `filled`; during the open period `GET /api/v1/trading/positions` lists it; after close `docker logs ... | grep -c exness.unmapped_close` prints `0`; user confirms the SPA showed the position.

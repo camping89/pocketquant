@@ -11,7 +11,6 @@
 - **Status:** ✓ PASS
 - **Notes:** Exact match to expected ~560 tests. All critical parity tests passing:
   - `test_engulfing.py` suite: 16 tests passing (parity proof)
-  - `test_hitnrun2.py` suite: 18 tests passing (parity proof)
   - Backtest report collection: All tests passing
   - Broker equity integration: All tests passing
 
@@ -76,7 +75,6 @@ All architectural contracts maintained. No import violations introduced.
 | Metric | Tests | Status |
 |--------|-------|--------|
 | **Engulfing Characterization** | 16 tests | ✓ PASS |
-| **HitNRun2 Characterization** | 18 tests | ✓ PASS |
 | **Equity Ledger (broker-sourced)** | Multiple suites | ✓ PASS |
 | **Report Collection** | Full suite | ✓ PASS |
 

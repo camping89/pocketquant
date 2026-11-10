@@ -10,7 +10,6 @@ Rename interface `IStrategy` → `IStrategyService` + 2 impl → `*StrategyServi
 |---|---|---|---|---|
 | `IStrategy` | `IStrategyService` | `core/domain/strategy/interfaces.py` | `strategy_service_interface.py` | 6 |
 | `EngulfingStrategy` | `EngulfingStrategyService` | `core/domain/strategy/services/engulfing.py` | `engulfing_strategy_service.py` | 4 |
-| `HitNRun2Strategy` | `HitNRun2StrategyService` | `core/domain/strategy/services/hitnrun2.py` | `hitnrun2_strategy_service.py` | 3 |
 
 **KHÔNG đổi:** `FilledOrder(Protocol)` (cùng file interfaces.py — di chuyển sang file mới, giữ tên).
 
@@ -34,7 +33,6 @@ Rename interface `IStrategy` → `IStrategyService` + 2 impl → `*StrategyServi
 ## Todo
 - [x] IStrategy → IStrategyService + rename file → strategy_service_interface.py (giữ FilledOrder)
 - [x] EngulfingStrategy → EngulfingStrategyService
-- [x] HitNRun2Strategy → HitNRun2StrategyService
 - [x] Cập nhật `_DefaultStrategy` + registry + __init__ re-export
 - [x] Xác nhận định danh strategy trong DB không đổi
 - [x] pytest + import-linter + pyright xanh

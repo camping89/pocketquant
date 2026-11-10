@@ -29,7 +29,7 @@ Backend additive, không đụng engine: (A2) denormalize `symbol`+`interval` to
 **Orders endpoint (red-team M4):** thuần read. Route → `BacktestQueryService.list_orders(run_id)` → `list_by_run` (đã có) → **map ở service** thành DTO key `order_id` (KHÔNG tái dùng `Order.to_mongo()` vì nó trả `_id`). FastAPI auto-encode datetime → isoformat khi route trả dict.
 
 ```
-GET /backtest/strategy/hitnrun2?symbol=BTCUSDT:BINANCE&interval=1m&limit=50
+GET /backtest/strategy/engulfing?symbol=BTCUSDT:BINANCE&interval=1m&limit=50
 → 200 [ { id, strategy_code, status, symbol, interval, date_range:{start,end},
           parameters, metrics:{...}, verdict, started_at, completed_at, error_message } ]
 

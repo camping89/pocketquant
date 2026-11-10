@@ -19,20 +19,12 @@
 **Parity Status:** ✅ CONFIRMED
 
 ### Characterization Tests (Parity Validation)
-Both critical backtest suites passed with NO assertion drift:
+The critical backtest suite passed with NO assertion drift:
 
 - **test_engulfing_backtest.py**: 3/3 passed
   - test_engulfing_registered_in_strategy_registry
   - test_backtest_multi_trade_on_repeated_engulfing_round_trips
   - test_backtest_no_trades_on_choppy_market
-  - **Parity metrics:** total_trades, gross PnL, net, final equity, Sharpe, max_drawdown unchanged
-
-- **test_hitnrun2_backtest.py**: 5/5 passed
-  - test_backtest_long_round_trip_on_downtrend
-  - test_backtest_short_round_trip_on_uptrend
-  - test_backtest_no_trades_on_choppy_market
-  - test_backtest_multi_trade_after_fill_reset
-  - test_backtest_sharpe_bounded_and_realized_metrics_present
   - **Parity metrics:** total_trades, gross PnL, net, final equity, Sharpe, max_drawdown unchanged
 
 ### Updated Tests

@@ -41,7 +41,7 @@ Size: ~+18 / −6 src — more code than it replaces (CLAUDE.md stop-and-ask poi
 
 Live paper: coarser bars no longer close, fill LIMITs, or mark prices; a 1m strategy's own signal bar no longer closes its entry; gap exits fill at the open (prod SL 7690 × 1.00005 = 7690.38, not 7681.31).
 
-Backtests: identical for in-range-open, non-signal bars. Deliberate: (1) a signal bar no longer closes its own entry; (2) a LIMIT submitted on bar N fills at earliest on N+1; (3) gap bars fill at the open. hitnrun2 most affected: its LONG SL can sit above entry (`max(min(prev_lows), …)`), so today it "exits" at a profit on the signal bar; now at the next bar's open. Traced: `test_backtest_long_round_trip_on_downtrend`, `_short_round_trip_on_uptrend`, `_multi_trade_after_fill_reset`, `_sharpe_bounded…` still pass (flat curve guarded by `std == 0`). Expect hitnrun2 P&L in real backtests to fall — the bias removed. Engulfing and pullback30 unchanged (SL/TP outside the signal bar).
+Backtests: identical for in-range-open, non-signal bars. Deliberate: (1) a signal bar no longer closes its own entry; (2) a LIMIT submitted on bar N fills at earliest on N+1; (3) gap bars fill at the open. Traced: `test_backtest_long_round_trip_on_downtrend`, `_short_round_trip_on_uptrend`, `_multi_trade_after_fill_reset`, `_sharpe_bounded…` still pass (flat curve guarded by `std == 0`). Engulfing and pullback30 unchanged (SL/TP outside the signal bar).
 
 Unchanged: Exness, persistence, current broker unit expectations (mid-range opens; orders placed before the event is created).
 

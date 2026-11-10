@@ -88,7 +88,7 @@ grep -c "^LOG_FORMAT=console$" ../pocketquant-config/vps/default/.env
 **Steps:**
 1. Skip this task when `grep -c "^Paper start:" plans/261028-0652-exness-only-parallel-runtime/reports/paper-daily.md` prints `1`.
 2. List: `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api python -c "import json,urllib.request as u;[print(x[\"id\"],x[\"strategy_code\"],x[\"symbol\"],x[\"interval\"],x[\"broker\"],x[\"actual_state\"]) for x in json.load(u.urlopen(\"http://localhost:41921/api/v1/subscriptions/\")) if x[\"symbol\"]==\"XAUUSD:EXNESS\" and x[\"interval\"]==\"1m\"]"'`.
-3. Ask (only an explicit yes counts): "Recommended: có — bật lại subscription paper XAUUSD:EXNESS 1m (<id>, <strategy_code>) để tiêu chí độ trễ 1m (`t0_t5_ms` p95 ≤ 1000 ms) có mẫu đo trong 14 ngày. Live đang tắt nên không có lệnh tiền thật. Trả lời `có` hoặc `chưa`." If step 2 printed no line, ask instead: "Recommended: có — tạo subscription paper hitnrun2 XAUUSD:EXNESS 1m (không có subscription 1m Exness nào) để có mẫu độ trễ. Trả lời `có` hoặc `chưa`." A `chưa` ends with the `NOT_YET` block (`NOT_YET: owner deferred the 1m paper subscription`).
+3. Ask (only an explicit yes counts): "Recommended: có — bật lại subscription paper XAUUSD:EXNESS 1m (<id>, <strategy_code>) để tiêu chí độ trễ 1m (`t0_t5_ms` p95 ≤ 1000 ms) có mẫu đo trong 14 ngày. Live đang tắt nên không có lệnh tiền thật. Trả lời `có` hoặc `chưa`." If step 2 printed no line, ask instead: "Recommended: có — tạo subscription paper engulfing XAUUSD:EXNESS 1m (không có subscription 1m Exness nào) để có mẫu độ trễ. Trả lời `có` hoặc `chưa`." A `chưa` ends with the `NOT_YET` block (`NOT_YET: owner deferred the 1m paper subscription`).
 <!-- Red team 2026-10-28: #13 -->
 4. On yes, admin call with the token kept inside the container and off every command line (`printf` is a shell builtin; `curl -H @-` reads the header from stdin). Create first only when step 2 printed nothing:
 ```bash
@@ -96,7 +96,7 @@ HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cac
 printf 'X-Admin-Token: %s\n' "$ADMIN_TOKEN" | curl -s -X POST -H @- http://localhost:41921/api/v1/subscriptions/<id>/start
 EOF
 ```
-   (create: `printf 'X-Admin-Token: %s\n' "$ADMIN_TOKEN" | curl -s -X POST -H @- -H 'Content-Type: application/json' -d '{"symbol":"XAUUSD:EXNESS","interval":"1m","broker":"paper"}' http://localhost:41921/api/v1/strategies/hitnrun2/subscriptions` in the same heredoc form, note its `id`, then the start call.)
+   (create: `printf 'X-Admin-Token: %s\n' "$ADMIN_TOKEN" | curl -s -X POST -H @- -H 'Content-Type: application/json' -d '{"symbol":"XAUUSD:EXNESS","interval":"1m","broker":"paper"}' http://localhost:41921/api/v1/strategies/engulfing/subscriptions` in the same heredoc form, note its `id`, then the start call.)
 5. If `paper-daily.md` does not exist, create it with `# Paper daily rows` and the table header of Task 10.4. Append the line `Paper start: <UTC now>, subscription <id>`.
 **Success criteria:** the subscription runs; the start line exists.
 **Verify:** re-run the step 2 command after 30 s; it prints the id with `paper running`; `grep -c "^Paper start:" plans/261028-0652-exness-only-parallel-runtime/reports/paper-daily.md` prints `1`.

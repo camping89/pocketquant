@@ -31,9 +31,9 @@ No real order is sent until every safeguard has been shown to work in prod at ze
 - Entry: phases 01–06 are on `develop`, and E2 row 2 (Sat 2026-10-24 03:00Z) has been recorded. **E2 closed is no longer required** (see Q1).
 - Deploy window: a weekend market close (Sat 03:00Z to Sun 21:00Z, before the EURUSD reopen at 21:05Z), after an E2 row has been written and before the next one. If the code is late, use Sat 2026-10-31.
 - Steps 1–4 are as in the current plan (config gate, push `master` gated, prod checks, `tunnel-test` checks).
-- Step 5, new and read-only: run the Phase 09 step 1 stop-distance query now, against the paper `trades` of `hitnrun2`, and record it in `reports/round-trip.md`.
+- Step 5, new and read-only: run the Phase 09 step 1 stop-distance query now, against the paper `trades`, and record it in `reports/round-trip.md`.
   - Pass: count > 0 and zero distances above 25 USD/oz.
-  - Otherwise, stop and ask now. The user then has a week to decide, rather than finding out on the live day. `hitnrun2` caps its stop at 1% of entry, about 41.8 USD/oz on gold (`hitnrun2_strategy_service.py:37,102`), so stops between 25 and 41.8 are possible. Each one is rejected `below_min_lot`.
+  - Otherwise, stop and ask now. The user then has a week to decide, rather than finding out on the live day.
 - Verification: the CI verdict reports `0 failures`; the settings line prints `False 25.0 0.01 1000.0 0.1 True`; `POST .../subscriptions/x/stop` returns `401`; `tunnel-test` returns 200.
 
 ### 08 Tunnel cutover. Same weekend as 07. Adds a break-glass drill and a runbook line.
@@ -57,7 +57,7 @@ No real order is sent until every safeguard has been shown to work in prod at ze
   - `broker: exness` and `running`;
   - one `exness.broker_connected` and one `exness.snapshot_reconciled`;
   - the SPA shows LIVE and "Entries paused".
-- Step 6, the zero-money proof while paused. Wait for each strategy's first entry signal: about 8 market hours of `hitnrun2` warmup, and about 21 open hours for `engulfing`. Pass for each strategy:
+- Step 6, the zero-money proof while paused. Wait for each strategy's first entry signal: about 21 open hours of `engulfing` warmup. Pass for each strategy:
   - `exness.order_rejected_presubmit reason=entries_paused`;
   - no `openPosition` in the log;
   - no `below_min_lot` for that signal.
@@ -86,13 +86,12 @@ No real order is sent until every safeguard has been shown to work in prod at ze
 | Δ4 | Phase 09 pauses before creating `exness` subscriptions, and needs one paused-signal rejection per strategy before Resume | It proves the pause gate and the sizing-to-lot-grid in prod at zero money. Today the pause is first proven while a real position is open (current step 7) | `strategy_app_service.py:405-415`; plan Phase 04 step 5 |
 | Δ5 | Phase 08 adds an SSH break-glass Pause drill and a runbook block | After cutover the tunnel is the only public entry. A tunnel or Cloudflare outage would block SPA Pause, and the current rollback ladder has no path that avoids the tunnel | `plan.md:133-137`; `docs/deployment.md:131` |
 | Δ6 | The AC6 stop becomes asymmetric | When the code double-counts commission, the cap trips early, which is safe. Only an under-count risks money. The current plan stops on the safe case | `exness_broker_adapter.py:266-277`; `phase-09...md:67-69` |
-| Δ7 | The stop-distance check also runs in Phase 07 | It finds the `below_min_lot` gold problem about a week before the live day. Stops up to 1% of entry (about 41.8 USD/oz) are legal for `hitnrun2` | `hitnrun2_strategy_service.py:37,102` |
 | Δ8 | Two Phase 04 tests pin fail-closed behaviour: no cap rejects, and no max-lots means the minimum lot | These are the two config typos that matter. The second is a verified non-issue, and the test keeps it that way | `exness_broker_adapter.py:107,243-245`; `exness_mappers.py:93` |
 | Δ9 | Phases 06 and 08 use the 2026 dashboard path and remove the `tunnel-test` CNAME by hand | The old menu was removed on 2026-10-12, and removing a route leaves its CNAME | packet lines 45-46 |
 | Δ10 | Phase 10 rows check whether `StartedAt` changed against the intended pause | A restart clears the pause silently, and nothing alerts | plan Phase 04 step 2; packet line 9 |
 | Δ11 | The rollback ladder gains "Pause over SSH" (step 1b). Step 4 (flag false) requires a flat account first | With the flag off, no adapter is built, so a venue SL/TP close is not recorded. That is a bookkeeping gap, not a money loss | `plan.md:137`; `broker_factory.py:87-88` (plan Phase 04 context) |
 
-The plan's unresolved question "Does hitnrun2 move its SL?" closes as **no** (packet line 24). The step 1 [UNVERIFIED] note is removed.
+The step 1 [UNVERIFIED] note is removed.
 
 ## 3. Answers to the open questions
 
@@ -103,7 +102,7 @@ The plan's unresolved question "Does hitnrun2 move its SL?" closes as **no** (pa
 - What waiting costs: Phases 07 and 08 slip to after 11-02. The first live order slips by the same amount, and the tunnel and cutover risk then lands in the same week as the first real money.
 
 **Q2. Best order for the earliest safe first live trade.** Code 01–06 runs to about Fri 10-23. Phases 07 and 08 ship on the weekend of 10-24/25 with live off. Phase 09 starts after E2 row 4 passes on Mon 11-02.
-- The earliest live entry is about 8 market hours later (`hitnrun2` warmup, `hitnrun2_strategy_service.py:92-94`), plus the paused-signal proof in Δ4.
+- The earliest live entry is about 21 open hours later (`engulfing` warmup), plus the paused-signal proof in Δ4.
 - The faster alternative is a round trip in the week of 10-26. It saves about one week. It costs E2's `running 2`, it means holding or flattening around the DST weekend on an unproven post-DST calendar, and the first live order would precede the last data check.
 - I recommend waiting. At 250 USD, a week of delay has no money cost.
 
@@ -123,7 +122,7 @@ Account ≤ 250 USD, 0.01 lot. Gold: 1 oz per 0.01 lot, so the loss at the stop 
 
 1. **Pause cleared by a restart (deploy, crash, VPS reboot) while the user believes entries are paused.** Up to one capped day per missed restart: about 25 USD realized, plus open risk (Risk 2). Likelihood M.
    - Mitigations: no deploy while paused or positioned (kept); re-pause right after any deploy that is meant to stay paused; the `StartedAt` column (Δ10).
-   - The warmup after a restart gives at least 8 market hours (`hitnrun2`) or about 21 (`engulfing`) before any entry. Checking at least every 8 h while paused therefore catches it in time [I].
+   - The warmup after a restart gives about 21 open hours (`engulfing`) before any entry. Checking at least every 8 h while paused therefore catches it in time [I].
    - For an absence longer than that, stop the subscriptions. That is a hard stop, and it costs a re-warm.
 2. **The daily cap is realized-only and checked at open.**
    - Two open positions are not counted. The worst day is about 24.99 realized + 25 + 25 ≈ 75 USD (30% of the account) before gaps (`exness_broker_adapter.py:255-277`). Likelihood L, impact H.
@@ -132,12 +131,10 @@ Account ≤ 250 USD, 0.01 lot. Gold: 1 oz per 0.01 lot, so the loss at the stop 
 4. **Cap under-counts real costs** (commission netting, swap on the close deal, fees outside `_PNL_DEAL_TYPES`). The cap would trip late by the uncounted amount, a few USD per trade [I]. Mitigation: Δ6 stops only on this direction.
 5. **Restart while positioned.** The strategy state (`_open_direction`) is not restored; no restore path was found in `strategy_app_service.py` or reconcile [V grep].
    - After warmup, an opposite-direction signal of equal quantity (always true at 0.01 lot) is sent as `closePosition` (`exness_broker_adapter.py:197-212`). The position closes early.
-   - The strategy then keeps `_open_direction` set, because the close fill has its own side (`hitnrun2_strategy_service.py:125-128`). It never enters again until the next restart [I].
    - Money: an early close only; the venue SL bounds the rest. Mitigation: the existing no-deploy-while-positioned rule; after an unplanned restart while positioned, stop and ask.
 6. **Tunnel or Cloudflare outage blocks SPA Pause.** Trading continues within the caps. Mitigation: the Δ5 SSH drill and the runbook block; closing in the Exness app works with no tunnel.
 7. **Margin.** The margin for 0.01 lot of gold at 1:1000 is about 4.2 USD, and even at 1:200 it is about 21 USD. A venue rejection becomes CANCELLED and loses no money. Phase 09 step 2 is kept.
 8. **Flag off while positioned.** No adapter is built, so the venue close is not recorded (bookkeeping only). Mitigation: Δ11.
-9. **No money: per-bar churn.** While paused, at the cap or `below_min_lot`, `hitnrun2` re-arms on each rejection (`:130-132`). It re-signals every 1m bar while its condition holds, which writes one REJECTED order and one WARNING per bar. This is pre-existing for `below_min_lot`. Record the counts in the observation rows; do not fix it in this plan.
 
 ## Unresolved questions
 - Risk 2: does the user accept a worst day of about 75 USD with two concurrent positions, or should the Phase 09 round trips run one strategy at a time?

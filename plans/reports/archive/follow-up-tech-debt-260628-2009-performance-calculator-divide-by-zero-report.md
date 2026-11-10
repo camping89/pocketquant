@@ -33,7 +33,7 @@ if std_return == 0 or np.isnan(std_return):
     return 0.0
 ```
 
-`sortino_ratio` tương tự (`:131`, `:136-137`). `nan` lan tới `std_return` → `np.isnan` bắt → trả `0.0`. Test `test_backtest_sharpe_bounded_and_realized_metrics_present` (hitnrun2) đã assert Sharpe finite, không NaN/inf → đầu ra vẫn hợp lệ. Vấn đề **chỉ là warning noise** trên stderr, không sai số liệu.
+`sortino_ratio` tương tự (`:131`, `:136-137`). `nan` lan tới `std_return` → `np.isnan` bắt → trả `0.0`. Đầu ra vẫn hợp lệ (Sharpe finite, không NaN/inf). Vấn đề **chỉ là warning noise** trên stderr, không sai số liệu.
 
 ## Đề xuất fix (cho ticket riêng)
 

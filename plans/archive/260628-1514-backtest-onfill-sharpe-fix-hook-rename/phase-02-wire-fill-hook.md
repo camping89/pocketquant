@@ -27,7 +27,7 @@ Thiết kế cũ (broker `subscribe_order_updates` closure) bị bác bỏ vì:
 - `order_app_service.submit()` publish `OrderFilledEvent{order_id, subscription_id, symbol, side, filled_quantity, filled_price}` khi entry fill — `order_app_service.py:32-39`. **Đã có.**
 - `order_app_service.on_order_update()` (live broker callback) publish CÙNG event — `order_app_service.py:185-194`. **Đã có.**
 - `OrderFilledEvent.side = order.side` (non-optional `OrderSide`) — `order_app_service.py:190`. Né Optional gap.
-- `Signal.subscription_id = strategy.id` (`hitnrun2.py:141`) → propagate vào `Order.subscription_id` → `OrderFilledEvent.subscription_id` = key `self._strategies`.
+- `Signal.subscription_id = strategy.id` → propagate vào `Order.subscription_id` → `OrderFilledEvent.subscription_id` = key `self._strategies`.
 - `StrategyAppService` đã là event-handler base (`@event_handler` dùng được, registry `register_instance:61`).
 - **GAP DUY NHẤT:** synthetic SL/TP exit (`PaperBroker._fire_synthetic_exit:636-674`) chỉ gọi `_notify_callbacks`, **KHÔNG publish `OrderFilledEvent`**. Exit chính là cái strategy cần để reset.
 
@@ -67,7 +67,7 @@ sequenceDiagram
     ST->>ST: reset _open_direction nếu opposite-side
 ```
 
-**`on_order_filled` signature:** `(order, fill_price)` — `order` duck-typed, chỉ cần `.side` (OrderSide). `OrderFilledEvent.side` thoả. Cập nhật docstring hook: `order` đảm bảo có `.side: OrderSide`. `hitnrun2.on_order_filled` thêm guard `getattr(order,'side',None)` (đã có) — nhưng giờ `.side` luôn non-optional.
+**`on_order_filled` signature:** `(order, fill_price)` — `order` duck-typed, chỉ cần `.side` (OrderSide). `OrderFilledEvent.side` thoả. Cập nhật docstring hook: `order` đảm bảo có `.side: OrderSide`.
 
 **Ordering (red-team Finding 11):** collector build trade qua broker callback (`subscribe_order_updates`), strategy reset qua event bus — hai đường độc lập, không cần đảm bảo thứ tự (reset chỉ chạm `_open_direction`, disjoint với trade building). Bỏ claim "collector trước bridge" ở thiết kế cũ.
 
@@ -75,7 +75,6 @@ sequenceDiagram
 
 - Modify: `src/pocketquant/engine/app_services/strategy_app_service.py` — thêm `@event_handler(OrderFilledEvent)` `_on_order_filled` (import `OrderFilledEvent` từ `core.domain.order`).
 - Modify: `src/pocketquant/core/infra/brokers/paper/paper_broker.py` — `_fire_synthetic_exit:636-674` publish `OrderFilledEvent` qua `self._event_bus` (guard `if self._event_bus`). Import event.
-- Modify: `src/pocketquant/core/domain/strategy/services/hitnrun2.py` — `on_order_filled` (đã rename Phase 1) giữ guard side.
 - Verify-only: `order_app_service.py:32-39, 185-194` (entry + live publish — không đụng).
 - Verify-only: `backtest_app_service.py:90` collector subscribe (không đụng — đường riêng).
 - Layer check: `OrderFilledEvent` ở `core.domain.order` — `engine` import core OK (import-linter).
@@ -85,12 +84,10 @@ sequenceDiagram
 1. Thêm `_on_order_filled` handler vào `StrategyAppService` (route theo `subscription_id`, try/except + log).
 2. `_fire_synthetic_exit` publish `OrderFilledEvent` (sub_id, side, filled_price, qty) sau `_notify_callbacks` hoặc cùng chỗ; chỉ khi `event_bus` có.
 3. Kiểm tra entry fill ở backtest: `run_single`/`load_strategy_for_backtest` dùng PaperBroker + `order_app_service.submit`? Nếu backtest submit KHÔNG qua order_app_service → entry fill phải publish event ở đâu? **Verify path submit của backtest** (xem Risk).
-4. `hitnrun2.on_order_filled`: confirm reset logic với `event.side`.
-5. Test: fixture nhiều breakout → multi-trade; test handler route đúng sub_id; test synthetic exit publish event.
+4. Test: fixture nhiều breakout → multi-trade; test handler route đúng sub_id; test synthetic exit publish event.
 
 ## Success Criteria
 
-- [ ] Backtest `hitnrun2` fixture nhiều breakout → `total_trades > 1`.
 - [ ] Synthetic SL/TP exit publish `OrderFilledEvent` mang đúng `subscription_id` + `side`.
 - [ ] `_on_order_filled` route đúng strategy theo id; strategy lạ id → no-op.
 - [ ] Opposite-side fill → `_open_direction is None`; same-side → giữ (test `test_on_fill_same_side_does_not_reset` vẫn xanh).

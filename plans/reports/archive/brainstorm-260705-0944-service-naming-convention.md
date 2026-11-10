@@ -41,7 +41,6 @@
 |---|---|---|
 | `IStrategy` | `IStrategyService` | `strategy_service_interface.py` |
 | `EngulfingStrategy` | `EngulfingStrategyService` | `engulfing_strategy_service.py` |
-| `HitNRun2Strategy` | `HitNRun2StrategyService` | `hitnrun2_strategy_service.py` |
 
 ### 3. Application orchestrator → `*AppService`
 | Current | New class | New file |

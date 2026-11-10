@@ -56,7 +56,7 @@ scripts/rubric/
 ## Success Criteria
 
 - [ ] `score_run` cho 5 canonical run: mỗi run 3 axis grade + overall (=min 3 trục), breakdown truy về threshold.
-- [ ] `engulfing` → design-integrity/performance thấp (no edge); `hitnrun2` → performance kéo xuống bởi cost-to-edge dù robustness khá (profit_factor cao) → lộ cost-killed.
+- [ ] `engulfing` → design-integrity/performance thấp (no edge).
 - [ ] None metric (vd MAE/MFE low_coverage) → loại + re-normalize, không cho điểm 0 oan.
 - [ ] `RUBRIC_VERSION` xuất hiện trong mọi ScorecardResult VÀ header `docs/backtest-rubric/methodology.md`.
 - [ ] `docs/backtest-rubric/methodology.md` tồn tại, threshold table khớp `THRESHOLDS` trong code.

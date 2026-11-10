@@ -29,7 +29,7 @@ Test mới cho commission + update assertions churned (balance/equity lệch do 
 
 ## Churned assertions (update — expected)
 
-- `tests/backtest_test/engine/test_engulfing_backtest.py`, `test_hitnrun2_backtest.py`: **số trades + gross PnL KHÔNG đổi**; **net/final balance đổi** do commission model. Update expected net/balance.
+- `tests/backtest_test/engine/test_engulfing_backtest.py`: **số trades + gross PnL KHÔNG đổi**; **net/final balance đổi** do commission model. Update expected net/balance.
 - `test_result_collector_*`: commission giờ từ `result.commission` — value giống formula cũ nếu broker inject cùng bps. Kiểm tra collector test dùng broker có commission_bps khớp config → metrics KHÔNG đổi. Nếu test dựng broker không inject model (default bps=0) mà config có commission → phát hiện + fix wiring test.
 - `paper_broker_futures_accounting_test.py`: balance assertions cũ (no-commission) → thêm commission hoặc dùng bps=0 để giữ, tách case commission riêng.
 
@@ -48,7 +48,7 @@ lint-imports          # 8 contracts — CommissionModel ở trading không tạo
 - [x] Paper broker commission tests (4 path + can_afford + backward-compat)
 - [x] Factory percent→bps test
 - [x] `test_okx_order_mapper.py` fee dấu
-- [x] Update engulfing/hitnrun2 net+balance
+- [x] Update engulfing net+balance
 - [x] Update collector/accounting assertions
 - [x] `just test` xanh
 - [x] `ruff` + `pyright` xanh

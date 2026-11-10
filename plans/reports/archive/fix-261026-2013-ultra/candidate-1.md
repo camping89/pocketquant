@@ -35,7 +35,7 @@ Size: ~+24 / −6 src, ~+120 tests.
 **4. Behaviour changes**
 
 - Live paper: 5m–1w bars never fill or close anything; signal bar never checked; a manual order placed between bars skips the next bar; gap opens fill at the open (ES reopen → 7690 × 1.00005 = 7690.38).
-- Backtests: the three Q2 changes plus gap fills at open. No existing unit test changes expectation (each opens before any bar → cutoff None; `open=(h+l)/2` inside range or equal to the level, e.g. SL 98 with 99/97 → open 98). `test_hitnrun2_backtest` may move a TP exit from the signal bar to the recovery bar; its assertions (>1 trades, flat at end) hold.
+- Backtests: the three Q2 changes plus gap fills at open. No existing unit test changes expectation (each opens before any bar → cutoff None; `open=(h+l)/2` inside range or equal to the level, e.g. SL 98 with 99/97 → open 98).
 - Unchanged: intrabar level fills, SL-first intrabar, MARKET fills, entry spread, commission, Exness, schemas.
 
 **5. Risks**

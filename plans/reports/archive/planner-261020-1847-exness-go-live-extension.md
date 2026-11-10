@@ -36,10 +36,9 @@ The plan now has ten phases in runner order:
 
 ## Unresolved questions
 1. E2 closes on 2026-11-02, but Phase 07 requires E2. Phase 10's dates (observation to 2026-10-30, DST check 2026-11-02) cannot hold as written. Can Phase 07 ship with live off before E2 closes?
-2. Does `hitnrun2` trail its SL? If it does, `trades.sl_price` misstates the entry stop distance that the Phase 09 pre-check measures.
-3. Does the pinned `cloudflared` tag support `tunnel ready` for the healthcheck? Phase 06 step 3 checks this and has a fallback.
-4. Does deleting a tunnel public hostname also delete its DNS CNAME? Phase 08 tells the user to delete it if one is left.
-5. `margin_percent` units are still unverified. Phase 09 records the value raw.
+2. Does the pinned `cloudflared` tag support `tunnel ready` for the healthcheck? Phase 06 step 3 checks this and has a fallback.
+3. Does deleting a tunnel public hostname also delete its DNS CNAME? Phase 08 tells the user to delete it if one is left.
+4. `margin_percent` units are still unverified. Phase 09 records the value raw.
 
 Status: DONE_WITH_CONCERNS
 Summary: The go-live plan is extended in place to ten phases in execution order (04 backend safeguards and sizing, 05 SPA, 06 tunnel code, 08 tunnel cutover; old 04/05/06 became 07/09/10), with every cross-reference, dependency and gate updated, and `ak plan validate` passes.

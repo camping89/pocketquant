@@ -45,7 +45,7 @@ Labels: **[V]** I checked it in code at the cited line or in a cited report. **[
 | H3 / D10 | CI: a bucket that is not the calendar successor of the last one, or a bar with tick silence over the threshold in trading time, logs `reason=gap` and skips the entry. Prod: `strategy.entry_skipped` count reported per week. |
 | M1 / 1m latency | CI: with fresh caches the open path makes exactly 1 REST call (`openPosition`). Prod paper: `live.signal_latency` p95 for T0→T5 is 1 s or less on 1m Exness symbols. Before go-live, one live minimum-lot test shows T0→T6 at 2 s or less. |
 | M2 | CI: two subscriptions signal on one bar; the opens run one after the other. A close fill marks the loss-cap cache stale, and the next open refreshes it synchronously or refuses. |
-| M3 / D9 | CI: after a restart with a LONG mirror row, the strategy's direction is LONG. An opposite entry is **rejected** and does not become a close. hitnrun2 trades on the first live bar after a restart, not 8 h later. |
+| M3 / D9 | CI: after a restart with a LONG mirror row, the strategy's direction is LONG. An opposite entry is **rejected** and does not become a close. |
 | Handover (D8) | Over 10 deploys in market hours, every `trader.lease_released` has `inflight=0` and is logged inside [B+0 s, B+30 s] of a 1m boundary B. `handover_gap_ms` (release to the new owner publishing bars) is 2,000 or less. `takeover_ms` is 5,000 or less. 0 `reason=gap` skips on bars that span a handover. A probe hitting `/api/health` every 0.5 s during the deploy sees 0 failures. |
 | Rate budget | 0 terminal `exness.rate_limited` on order operations. `exness.rate_limited_retry` per 7 days stays at or below today's 72. |
 

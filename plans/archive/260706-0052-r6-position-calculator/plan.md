@@ -25,7 +25,7 @@ source: "plans/trading-calulation-fix/roadmap.md (R6) + design-execution-metrics
 ## Findings (đã kiểm tra codebase)
 
 - **4 site dựng `StrategyConfig` runtime** (`main_extensions`, `strategy_reconcile`, `backtest_dispatch`, `backtest_strategy_loader`) **KHÔNG** truyền `risk=` → `RiskConfig()` mặc định. API backtest payload không đọc risk param. `StrategyConfig.from_dict` (YAML reader) **dead** (không caller).
-- **NHƯNG tests override thật**: `test_engulfing_backtest.py:208` + `test_hitnrun2_backtest.py:250/266/334/349` truyền `RiskConfig(max_exposure_percent=…)` để parameterize sizing. Roadmap invariant cấm đổi số characterization.
+- **NHƯNG tests override thật**: `test_engulfing_backtest.py:208` truyền `RiskConfig(max_exposure_percent=…)` để parameterize sizing. Roadmap invariant cấm đổi số characterization.
 - → **Kết luận: giữ `RiskConfig` optional override** (pure-const sẽ phá tests). Consts là nguồn **default**, không thay thế param.
 - `validate_size`: **dead** (chỉ definition, 0 caller) → xoá.
 - Call site sizing duy nhất trong hot path: `strategy_app_service.py:361`. Unit test trực tiếp: `test_engulfing.py:232`.
@@ -49,7 +49,7 @@ source: "plans/trading-calulation-fix/roadmap.md (R6) + design-execution-metrics
 
 ## Invariants (mọi phase giữ)
 
-- **Parity**: engulfing/hitnrun2 characterization tests pass **KHÔNG sửa số** (total_trades/gross PnL/net/equity/Sharpe…). Bằng chứng logic percent-risk không đổi. `calculate().size` == `calculate_size()` cũ với cùng input.
+- **Parity**: engulfing characterization tests pass **KHÔNG sửa số** (total_trades/gross PnL/net/equity/Sharpe…). Bằng chứng logic percent-risk không đổi. `calculate().size` == `calculate_size()` cũ với cùng input.
 - **1 source consts**: `git grep` không còn literal `0.02`/`0.10`/`0.01` rời rạc cho risk default ngoài 3 consts (RiskConfig defaults + RiskCheckHandler + sizer đều tham chiếu). *(bound validation `__post_init__` literal giữ — semantic khác.)*
 - **Override giữ**: `StrategyConfig(risk=RiskConfig(max_exposure_percent=…))` vẫn tác động sizing y hệt.
 - **import-linter 8 contract xanh**: risk→trading chỉ `TYPE_CHECKING`; engine.execution→core.domain.risk hợp lệ. No fastapi/bson. Không circular import (verify `python -c "import pocketquant.core.domain.risk"`).

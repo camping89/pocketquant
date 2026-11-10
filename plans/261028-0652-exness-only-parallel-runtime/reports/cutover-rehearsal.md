@@ -9,7 +9,7 @@ Rehearsal: PASS
 - Images: `pqlocal/pocketquant:new` and `:old` are the same backend build plus the rehearsal `sitecustomize.py` layer. Paper brokers report one order in flight for 45 s after the first `inflight_count` read. `pqlocal/pocketquant-web:old` is built from `origin/master` (proxies `app`); `:new` is built from `develop` (proxies `api`).
 - Compose project `pqrehearsal`, containers renamed `pqr-*`, paths `./logs` and `./bin`, lock disabled.
 - Deviation from the plan: host ports changed to `MONGO_PORT=47017`, `REDIS_PORT=47379`, `PORTAINER_PORT=49000`. Port 57379 is inside a Windows excluded TCP port range, so Docker could not bind it.
-- One paper subscription (`hitnrun2`, `BTCUSDT:BINANCE`, 1m) was seeded; it reached `actual_state=running` in the old `pqr-app`.
+- One paper subscription (`engulfing`, `BTCUSDT:BINANCE`, 1m) was seeded; it reached `actual_state=running` in the old `pqr-app`.
 
 ## OOM abort run
 

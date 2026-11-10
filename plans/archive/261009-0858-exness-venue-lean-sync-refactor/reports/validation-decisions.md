@@ -6,7 +6,7 @@ These are the user's decisions. They are binding and override the original plan 
 
 1. **The red team is applied in full.**
    - Apply all 15 accepted findings and the Medium mechanical fixes listed under "Red-team findings to apply" below.
-   - Findings about live money still apply to the code that gets built, because the broker is still built (decision 3). This covers the lot clamp/fill mismatch, the loss-cap shape, reconciliation, rate priority, the hitnrun2 reject reset, the sizer minimum-lot check and key handling.
+   - Findings about live money still apply to the code that gets built, because the broker is still built (decision 3). This covers the lot clamp/fill mismatch, the loss-cap shape, reconciliation, rate priority, the sizer minimum-lot check and key handling.
    - No live order is placed in this plan.
 2. **The metric gate is a ratchet.**
    - Measure the metric after the planned lean refactor (Phase 05) and freeze those numbers as the CI ceiling. CI fails if a later change makes either number worse.
@@ -23,7 +23,7 @@ These are the user's decisions. They are binding and override the original plan 
    - Validation in this plan covers:
      - Exness bars synced;
      - quotes streamed;
-     - backtests of `hitnrun2` and `engulfing` on Exness bars, with spread modelled;
+     - backtests of `engulfing` on Exness bars, with spread modelled;
      - both strategies running on PaperBroker on `:EXNESS` symbols for one market week, including a weekend close/reopen;
      - Exness broker tests green.
    - Rewrite D2 as follows. `ExnessBroker` passes fixture-based tests for:
@@ -67,7 +67,6 @@ The findings are in `red-team-security.md`, `red-team-failure-modes.md`, `red-te
 | 4 | Key delivery | `EXNESS_PRIVATE_KEY` must be a single-line base64url raw seed. Reject PEM. Drop `EXNESS_PRIVATE_KEY_PATH`. U2 says "committed and pushed to `pocketquant-config` master". Add a pre-deploy guard that fails on `BEGIN` or on a line without `=`. Verify after deploy with a boolean-only `is_configured` check. |
 | 5 | Lost fills, orphans, restarts | Use idempotent retry with the same key. Add `client.operation(id)`. Reconcile against the snapshot in both directions. Block signals until the first snapshot. Hold unmapped positions and refuse new orders on that instrument. Register the close path in `_pending_ack`. All of this is tested with fixtures. |
 | 6 | Shared rate budget | Reserve priority for order calls. Retry 429 with backoff and `Retry-After`. Run backfill at a rate fraction and never alongside a live broker. Exness sync must not delay Binance `sync_1m` (separate job or time cap). Budget is per operation from `/limits`. |
-| 7 | `hitnrun2` silent after a reject | Deliver REJECTED/CANCELLED to the strategy or reset `_open_direction`, and add a test. |
 | 8 | Weekend-only calendar | Build `MarketCalendar` from the spike's `trade_sessions` (per weekday, including daily breaks). Add a T1.11 stop condition. The integrity check ignores slots outside sessions. |
 | 9 | Sizer can't reach the minimum lot | Add a T1.11 feasibility line. Log a presubmit rejection as `exness.order_rejected_presubmit`. Since live is off this only affects tests and docs, but keep the check. |
 | 10 | Lowercase instrument suffixes | Add a case-preserving map from composite code to Exness instrument name, populated from the spike's `instruments.json`. T1.11 records it instead of stopping. |

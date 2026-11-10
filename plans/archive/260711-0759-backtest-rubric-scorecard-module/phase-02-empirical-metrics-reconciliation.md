@@ -62,7 +62,7 @@ Reconciliation (`reconciliation.py`):
 
 - [ ] 13 metric + 3 reconciliation function pass unit test với input đã biết.
 - [ ] `019f36d2` reconciliation: planned R:R median ≈ 1.57, realized R-multiple âm (khớp master-report).
-- [ ] `hitnrun2`: cost_to_edge < 1 dù profit_factor 2.11 (lộ cost-killed); `engulfing`: gross edge ≈ 0 (no edge).
+- [ ] `engulfing`: gross edge ≈ 0 (no edge).
 - [ ] Không NaN/inf lọt ra (cap/guard hết).
 
 ## Risk Assessment

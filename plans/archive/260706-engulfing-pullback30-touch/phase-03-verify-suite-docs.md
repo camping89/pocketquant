@@ -28,7 +28,7 @@ Không có code mới — chỉ verify + docs. Golden fixture (`engulfing_golden
 
 ## Implementation Steps
 
-1. Grep docs cho `engulfing`/`hitnrun2` để tìm chỗ liệt kê strategy; nếu có bảng/danh sách → thêm dòng `engulfing_pullback30_touch` (mô tả: pullback 30% body, vào tại close bar kế tiếp khi chạm intrabar).
+1. Grep docs cho `engulfing` để tìm chỗ liệt kê strategy; nếu có bảng/danh sách → thêm dòng `engulfing_pullback30_touch` (mô tả: pullback 30% body, vào tại close bar kế tiếp khi chạm intrabar).
 2. Chạy focused: `pytest tests/core_test/unit/domain/strategy/test_engulfing_pullback30_touch.py tests/backtest_test/engine/test_engulfing_pullback30_touch_backtest.py`.
 3. Broaden: chạy `tests/core_test/unit/domain/strategy/` + `tests/backtest_test/engine/` (regression bản gốc engulfing).
 4. `ruff check` + `ruff format --check` trên file mới; `pyright`/`basedpyright` (theo config repo) trên module + test mới.

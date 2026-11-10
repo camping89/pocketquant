@@ -16,7 +16,7 @@ Every set with `verdict: pass` runs as one paper subscription for at least 14 da
 ## Context
 
 - D4: only passing sets go to paper; paper has no profit threshold and only reconciles. A failing set never goes to paper.
-- One subscription per set: the unique index `ix_subscriptions_dedup_intervals` (`subscription_repository.py:129-133`). The new sets' interval keys (`1m,5m,15m`, `1m,15m,1h`, `1m`) differ from the three existing ones, so no collision with A6.
+- One subscription per set: the unique index `ix_subscriptions_dedup_intervals` (`subscription_repository.py:129-133`). The new sets' interval keys (`1m,5m,15m`, `1m,15m,1h`) differ from the three existing ones, so no collision with A6.
 - Create body `{symbol, intervals, parameters, broker}` (`src/pocketquant/app/routes/strategy.py:16-20,55-65`) returns `id` (`src/pocketquant/engine/strategy/strategy_command_service.py:26-35`); a new subscription starts `stopped` until `POST /api/v1/subscriptions/{id}/start` (`strategy.py:90-96`). Mutations need `X-Admin-Token`. Paper subscriptions share one pooled paper broker, so results are read per subscription from `trades.run_id` (A5).
 - A5 columns and sources: trades per trading day (trades / trading days, plan.md Definitions); average commission per trade (`commission` field); exit-reason mix (`exit_reason` counts); zero `strategy_on_bar_error` (`strategy_app_service.py:623`, logs `strategy_id=<sid>`) and zero stale skips (`strategy.entry_skipped` with `reason=stale` and `subscription_id=<sid>`, `strategy_app_service.py:633-649`). Backtest trades: `backtest_trades` with `run_id = <backtest run id>`.
 - Trader logs rotate at 3 x 10 MB and a deploy replaces the container (`deploy/compose.prod.yml:16-20`), so each daily check reads the slice since the previous check and proves the retained log reaches back to it.
@@ -26,8 +26,8 @@ Every set with `verdict: pass` runs as one paper subscription for at least 14 da
 
 ## Entry gate
 
-1. Conventions EG (1)-(3); the previous report is `reports/phase-05-track-b-backtests.md`.
-2. `grep -h -c "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-track-a-backtests.md plans/261109-1349-1m-strategy-evidence/reports/phase-05-track-b-backtests.md` prints `2` then `1`.
+1. Conventions EG (1)-(3); the previous report is `reports/phase-02-track-a-backtests.md`.
+2. `grep -h -c "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-track-a-backtests.md` prints `2`.
 3. On a resume with `paper=` lines in this phase's report, run `uv run python -c "import re,datetime as d; t=open('plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md',encoding='utf-8').read(); u=re.findall(r'^daycheck .* until=(\S+)',t,re.M); n=d.datetime.now(d.UTC); last=d.datetime.fromisoformat(u[-1].replace('Z','+00:00')) if u else None; print('due=' + ('yes' if last is None or n-last >= d.timedelta(hours=20) else 'no') + ' next=' + ((last+d.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%MZ') if last else 'now'))"`. Pass: the output starts with `due=yes`. On `due=no` end with `NOT_YET: waiting for the next daily check` and the printed `next=` time as the resume time.
 
 On a miss, run `rm -f .cache/ssh/vps_key`, edit nothing and end with exactly:
@@ -48,17 +48,17 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 
 **Goal:** one `paper_plan` line per passing set, naming the backtest run whose parameters go to paper, or `paper_plan=none`.
 
-**Target files and symbols:** `reports/phase-02-*.md`, `reports/phase-05-*.md`.
+**Target files and symbols:** `reports/phase-02-*.md`.
 
 **Steps:**
-1. `grep -h "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-track-a-backtests.md plans/261109-1349-1m-strategy-evidence/reports/phase-05-track-b-backtests.md`.
+1. `grep -h "^verdict: " plans/261109-1349-1m-strategy-evidence/reports/phase-02-track-a-backtests.md`.
 2. If no line contains ` pass `, record `paper_plan=none`, skip Tasks 06.2-06.6, and end the report with `Result: PASS`.
 3. For each `verdict: <set> pass` line, take the runs with `gate=pass`. If exactly one, record `paper_plan=<set> run=<label> id=<backtest run id>` (id from that run's `run=` line). If both runs of the set pass, [ASK] (intent) "both runs of <set> passed; the index allows one paper subscription for the set; which parameters go to paper?" `Recommended: <the run with the higher profit_factor>`, reason: the backtest is the deciding evidence (D4). Record the answer, then the `paper_plan=` line.
-4. Parameters per run: `r1`/`r3` `{"entry_type": "market", "exit_mode": "sl_tp"}`; `r2`/`r4` `{"entry_type": "stop", "exit_mode": "strategy"}`; `r5` `{"min_profit_pct": 0.02}`; `r6` `{"min_profit_pct": <min_profit_low>}` (plan.md BTRUN). Strategy and intervals: `ts-1m-5m-15m` = `triple_screen` `["1m","5m","15m"]`; `ts-1m-15m-1h` = `triple_screen` `["1m","15m","1h"]`; `hitnrun2-1m` = `hitnrun2` `["1m"]`.
+4. Parameters per run: `r1`/`r3` `{"entry_type": "market", "exit_mode": "sl_tp"}`; `r2`/`r4` `{"entry_type": "stop", "exit_mode": "strategy"}`; Strategy and intervals: `ts-1m-5m-15m` = `triple_screen` `["1m","5m","15m"]`; `ts-1m-15m-1h` = `triple_screen` `["1m","15m","1h"]`.
 
 **Success criteria:** the number of `paper_plan=<set>` lines equals the number of passing verdict lines, or one `paper_plan=none` line exists when none passed.
 
-**Verify:** `uv run python -c "import re; t=open('plans/261109-1349-1m-strategy-evidence/reports/phase-02-track-a-backtests.md',encoding='utf-8').read()+open('plans/261109-1349-1m-strategy-evidence/reports/phase-05-track-b-backtests.md',encoding='utf-8').read(); p=open('plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md',encoding='utf-8').read(); n=len(re.findall(r'^verdict: \S+ pass ', t, re.M)); m=len(re.findall(r'^paper_plan=(?!none)\S+ run=r[1-6] id=\S+$', p, re.M)); z=len(re.findall(r'^paper_plan=none$', p, re.M)); print('paper_plan_ok=' + str((n > 0 and m == n and z == 0) or (n == 0 and m == 0 and z == 1)))"` prints `paper_plan_ok=True`.
+**Verify:** `uv run python -c "import re; t=open('plans/261109-1349-1m-strategy-evidence/reports/phase-02-track-a-backtests.md',encoding='utf-8').read(); p=open('plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md',encoding='utf-8').read(); n=len(re.findall(r'^verdict: \S+ pass ', t, re.M)); m=len(re.findall(r'^paper_plan=(?!none)\S+ run=r[1-4] id=\S+$', p, re.M)); z=len(re.findall(r'^paper_plan=none$', p, re.M)); print('paper_plan_ok=' + str((n > 0 and m == n and z == 0) or (n == 0 and m == 0 and z == 1)))"` prints `paper_plan_ok=True`.
 
 ### Task 06.2 — Create and start one paper subscription per passing set
 
@@ -101,7 +101,7 @@ print(f"state={d['desired_state']}/{d['actual_state']} broker={d['broker']} stra
 
 **Success criteria:** one running paper subscription per `paper_plan` set with the planned parameters; the three existing subscriptions unchanged.
 
-**Verify:** `grep -c -E "^paper=\S+ sub=\S+ run=\S+ started_at=\S+$" plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md; grep -c -E "^paper_plan=(ts-|hitnrun2-)" plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md` prints the same number twice; `grep "^paper_state=" plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md | grep -c -v "state=running/running broker=paper"` prints `0`; SUBSDIFF prints `subs_unchanged`.
+**Verify:** `grep -c -E "^paper=\S+ sub=\S+ run=\S+ started_at=\S+$" plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md; grep -c -E "^paper_plan=ts-" plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md` prints the same number twice; `grep "^paper_state=" plans/261109-1349-1m-strategy-evidence/reports/phase-06-paper-reconcile.md | grep -c -v "state=running/running broker=paper"` prints `0`; SUBSDIFF prints `subs_unchanged`.
 
 ### Task 06.3 — Daily error and stale check (resumable)
 

@@ -468,7 +468,6 @@ Sunday, `cutoff_dt` equals the Monday 00:00 UTC that opened the current week.
    `scripts/backfill/test_binance_bars.py` (3),
    `tests/scripts/rubric/test_reconciliation.py` (2),
    `tests/backtest_test/engine/test_result_collector_mark_to_market.py` (2),
-   `tests/backtest_test/engine/test_hitnrun2_backtest.py` (2),
    `tests/backtest_test/engine/test_engulfing_pullback30_touch_backtest.py` (2),
    `tests/backtest_test/engine/test_engulfing_backtest.py` (2),
    `tests/app_test/market_data/test_cascade_aggregator.py` (2),

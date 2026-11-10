@@ -21,10 +21,9 @@ Date: 2026-10-20. Plan: `plans/261019-1957-exness-go-live/` (10 phases in run or
 - The CLAUDE.md KISS rules apply: three files per flow at most, two hops at most, a second real caller before any new abstraction, and dead code deleted in the same change.
 
 ## Code facts (scout, 2026-10-20)
-- [V] Neither hitnrun2 nor engulfing moves its SL after entry. The SL is set once at signal time (`hitnrun2_strategy_service.py:151`, `engulfing_strategy_service.py:170`). No modify-SL path exists in the Exness or paper adapter. So `trades.sl_price` minus entry is the entry stop distance.
+- [V] Engulfing does not move its SL after entry. The SL is set once at signal time (`engulfing_strategy_service.py:170`). No modify-SL path exists in the Exness or paper adapter. So `trades.sl_price` minus entry is the entry stop distance.
 - [V] `margin_percent` is used only in test fixtures (`"1"`), and no repo doc gives its unit. [I] It is MT5-style, so 1 means 1%.
 - [V] A prod redeploy (master push) restarts the app. Running subscriptions come back through reconcile (5 s), because their docs persist in Mongo. Strategy buffers are cleared on start, and nothing preloads history. Warmup takes:
-  - hitnrun2 XAUUSD 1m: 480 closed bars, about 8 open-market hours. [V] The guard is at `hitnrun2_strategy_service.py:93`. Earlier advice said "minutes", which is wrong.
   - engulfing EURUSD 1h: 20 bars, about 21 open hours.
 - [V] Paper broker state lives in memory only, so paper positions are lost on restart.
 - [V] `deploy/vps/11-verify.sh` curls `http://localhost:${WEB_PORT:-80}` (lines 118-127) and requires an `ss` listener on that port (173-185). Both checks fail once the `web` `ports:` line is removed, so they must change in the same commit. `WEB_PORT` is also used in `deploy/compose.prod.yml:8-9` and `docs/deployment.md:99,117`.

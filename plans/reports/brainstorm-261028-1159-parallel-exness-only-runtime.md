@@ -53,7 +53,7 @@ Labels: **[V]** I checked it in code at the cited line or in a cited report. **[
 | H3 / D10 | CI: a bucket that is not the calendar successor of the last one, or a bar with tick silence over the threshold in trading time, logs `reason=gap` and skips the entry. Prod: `strategy.entry_skipped` count reported per week. |
 | M1 / 1m latency | CI: with fresh caches the open path makes exactly 1 REST call (`openPosition`). Prod paper: `live.signal_latency` p95 for T0→T5 is 1 s or less on 1m Exness symbols. Before go-live, one live minimum-lot test shows T0→T6 at 2 s or less. |
 | M2 | CI: two subscriptions signal on one bar; the opens run one after the other. A close fill marks the loss-cap cache stale, and the next open refreshes it synchronously or refuses. |
-| M3 / D9 | CI: after a restart with a LONG mirror row, the strategy's direction is LONG. An opposite entry is **rejected** and does not become a close. hitnrun2 trades on the first live bar after a restart, not 8 h later. |
+| M3 / D9 | CI: after a restart with a LONG mirror row, the strategy's direction is LONG. An opposite entry is **rejected** and does not become a close. |
 | Handover (D8) | Over 10 deploys in market hours, every `trader.lease_released` has `inflight=0` and is logged inside [B+0 s, B+30 s] of a 1m boundary B. `handover_gap_ms` (release to the new owner publishing bars) is 2,000 or less. `takeover_ms` is 5,000 or less. 0 `reason=gap` skips on bars that span a handover. A probe hitting `/api/health` every 0.5 s during the deploy sees 0 failures. |
 | Rate budget | 0 terminal `exness.rate_limited` on order operations. `exness.rate_limited_retry` per 7 days stays at or below today's 72. |
 
@@ -171,7 +171,7 @@ Margin is low: A leads by 6 in total but by at most 3 on any one criterion, and 
 These are facts the verifier checked. They do not rewrite the contract above; the plan built from it must include them.
 
 1. Set `stop_grace_period` (about 120 s) and state the lease TTL and renew interval (30 s / 10 s). The compose default of 10 s would SIGKILL the old trader in the middle of its drain.
-2. Build and warm up strategies in standby, before takeover; that is what D8 asks for. Takeover then only connects the broker, reconciles and seeds the direction. hitnrun2 needs 481 1m bars (`hitnrun2_strategy_service.py:35-37,61`).
+2. Build and warm up strategies in standby, before takeover; that is what D8 asks for. Takeover then only connects the broker, reconciles and seeds the direction.
 3. Define the Redis-seed gap case. The seed can be up to 0.2 s stale (`bar_app_service.py:225-228`) or missing after a close (`:164-170`). Gap-flag a builder that starts mid-bucket without a covering seed, using `last_update` (`:234`).
 4. Record an owner decision on deleting the Exness `closePosition` branch. Once it is gone, only the venue SL/TP closes a live position.
 5. The synchronous loss-cap fallback costs about 2 s on the first entry after any close. Say so in the plan; tighten the refresh if 1m entries cluster.

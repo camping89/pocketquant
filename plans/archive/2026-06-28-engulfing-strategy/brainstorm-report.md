@@ -28,7 +28,6 @@ Thêm strategy `engulfing` cho PocketQuant với 2 layer tách biệt:
 ## 2. Codebase Context (scout findings)
 
 - **Strategy interface**: `core/domain/strategy/interfaces.py` — `IStrategy.on_bar(bar) -> Signal | None`. Bar = dict `{open,high,low,close,volume,timestamp,symbol,interval}`.
-- **Blueprint gần nhất**: `core/domain/strategy/services/hitnrun2.py` — entry-on-close + SL/TP = looser của technical level & account cap; position cap 1 lệnh; state reset trong `on_fill`.
 - **Registry**: `core/domain/strategy/services/__init__.py` → `STRATEGY_REGISTRY` dict. Thêm 1 dòng là API tự expose.
 - **Signal**: `core/domain/strategy/value_objects.py` — đã có `entry_price`, `stop_loss_price`, `take_profit_price`, `entry_logic`. **Một** TP duy nhất.
 - **Pipeline**: `Signal` → `StrategyAppService._process_signal` (`engine/app_services/strategy_app_service.py:289`) → `OrderAggregate` → `PaperBroker`. PaperBroker auto-fill SL/TP trên `BarCompletedEvent`, đóng **toàn bộ** position (`_fire_synthetic_exit`, `paper_broker.py:636`).
@@ -105,7 +104,7 @@ _DEFAULTS = {
 }
 ```
 
-- Position cap = 1 lệnh/lúc (`_open_direction`, reset trong `on_fill` — copy pattern `hitnrun2`).
+- Position cap = 1 lệnh/lúc (`_open_direction`, reset trong `on_fill`).
 - Warmup: cần ≥ `key_level_lookback_bars` bar trước khi tính key-level.
 
 ## 5. Evaluated Approaches
@@ -134,7 +133,7 @@ _DEFAULTS = {
 
 ## 6. Recommended Solution
 
-Strategy Python thuần (giống `hitnrun2`) + client-side TS visualization, một định nghĩa engulfing khóa bằng golden fixture.
+Strategy Python thuần + client-side TS visualization, một định nghĩa engulfing khóa bằng golden fixture.
 
 ### Files
 

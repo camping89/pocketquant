@@ -25,7 +25,7 @@ Paper proves the stop entry, the strategy EXIT, manual close and manual cancel o
 - <!-- Red team 2026-11-01: #14 --> Live ring entries: the warm-up replay fills the ring before the first live write, so obs-5 counts only entries whose `bar_start` is after `paper_started_at`.
 - <!-- Red team 2026-11-01: #7 --> D7: every attempt clears `manual_action` and records `accepted` or `rejected:<code>`; obs-3 and obs-4 require `accepted`. With the setup still holding, Triple Screen re-places its stop on the next entry bar after a manual cancel; that is expected.
 - Synthesis D11 (`reports/kongming-261101-1630-debate-synthesis.md`; plan.md owner decisions stop at D9) and design verdict "1d comparison": <!-- Consistency sweep 2026-11-01 --> the cascade overwrites the stored REST bar (`src/pocketquant/core/infra/persistence/repositories/bar_repository.py:42-98`), so compare stored 1d bars with bars fetched fresh by `ExnessAdapter.fetch_ohlcv` (`src/pocketquant/core/infra/exness/exness_adapter.py:28-66`; op `getCandleHistory` is not an order op, so the live flag does not block it). `ExnessClient(settings)` exposes `is_configured` and `close()` (`src/pocketquant/core/infra/exness/exness_client.py:172-186,364`). The comparison waits for 7 full UTC days after the day of `d1_deployed_at` (at least `d1_deployed_at` + 7 days).
-- C12, D5, R8: no backup; exact `_id` lists; orphans (positions, orders, trades linked to no subscription) listed separately with their own yes; children first; assert each `deleted_count`; re-list to zero; never touch `tracked_symbols`, `bars`, `sync_status`, `job_history`; never call `TrackedSymbolService.remove` (it cascades by symbol, `src/pocketquant/engine/market_data/tracked_symbols_service.py:93-139`). Links: positions and orders by `subscription_id`, trades by `run_id` = subscription id plus `strategy_code`, backtest orders and trades by `run_id` and `strategy_code` (`reports/scout-web-docs-ops.md`, Collections table). Prod before the plan: 4 STF subscriptions, 2 open BTCUSDT:BINANCE positions, 234 positions, 259 orders, 215 trades, 21 backtest runs (`reports/debate-evidence-packet.md`).
+- C12, D5, R8: no backup; exact `_id` lists; orphans (positions, orders, trades linked to no subscription) listed separately with their own yes; children first; assert each `deleted_count`; re-list to zero; never touch `tracked_symbols`, `bars`, `sync_status`, `job_history`; never call `TrackedSymbolService.remove` (it cascades by symbol, `src/pocketquant/engine/market_data/tracked_symbols_service.py:93-139`). Links: positions and orders by `subscription_id`, trades by `run_id` = subscription id plus `strategy_code`, backtest orders and trades by `run_id` and `strategy_code` (`reports/scout-web-docs-ops.md`, Collections table). Prod before the plan: 2 STF subscriptions, 2 open BTCUSDT:BINANCE positions, 234 positions, 259 orders, 215 trades, 21 backtest runs (`reports/debate-evidence-packet.md`).
 - Amended 2026-11-02 (owner, Phase 16): two extra paper `triple_screen` subscriptions run beside the primary, one per other D3 set (`extra_paper_sub=` lines in `reports/phase-16-*.md`). obs-1..obs-6 bind to the primary `paper_sub_id` only. The extras are observed opportunistically as `extra-obs-<set>` lines, which never gate this phase and never start with `obs-`. They share one paper account balance with the primary, so paper results per set are read from per-subscription trades. They are not in the Task 17.3 lists, which select by STF strategy codes. In the obs-3, obs-4 and obs-6 [USER] asks, name the subscription `15m,1h,4h`, because `/strategies` lists three Triple Screen subscriptions.
 - Amended 2026-11-03 (owner, plan.md D13-D15): the phase closes in one run. Observations use existing prod evidence plus tests, never synthetic data (D13). Task 17.2 compares the latest 14 stored days now, before 2026-11-03T03:00Z (D14). Task 17.2b reviews the live 1d cascade code, read-only (D15). Advice: `plans/reports/advise-261103-0025-finish-mtf-plan-now.md`.
 - Synthesis D12: the delete runs last, after the observations, unless the owner says delete now. <!-- Consistency sweep 2026-11-01 -->
@@ -177,7 +177,7 @@ asyncio.run(main())
 import json
 import sys
 PAPER = sys.argv[1]
-STF = ["hitnrun2", "engulfing", "engulfing_pullback30_touch"]
+STF = ["engulfing", "engulfing_pullback30_touch"]
 def ids(coll, q):
     return sorted(d["_id"] for d in db[coll].find(q, {"_id": 1}))
 S = ids("subscriptions", {"strategy_code": {"$in": STF}})
@@ -287,7 +287,7 @@ print(f"mismatch={mismatch}")
 **Target files and symbols:** docs changed since `e4a998b8`; `plan.md` front matter.
 
 **Steps:**
-1. Stale words: `git grep -n -i -E "hitnrun2|engulfing_pullback|engulfing_strategy|dedup_triple|SL/TP only|One take-profit per entry|swing-pivot" -- docs README.md CLAUDE.md | wc -l` prints `0`.
+1. Stale words: `git grep -n -i -E "engulfing_pullback|engulfing_strategy|dedup_triple|SL/TP only|One take-profit per entry|swing-pivot" -- docs README.md CLAUDE.md | wc -l` prints `0`.
 2. Names exist and length holds:
 ```bash
 for f in $(git diff --name-only e4a998b8..HEAD -- docs README.md CLAUDE.md); do

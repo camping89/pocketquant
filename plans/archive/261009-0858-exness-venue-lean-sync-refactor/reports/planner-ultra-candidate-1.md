@@ -16,7 +16,7 @@ created: 2026-10-09
 
 ## Overview
 
-Exness becomes a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`). Before that, the sync pipeline is rebuilt as one shared runner driven by a per-exchange `SyncPolicy`, with Binance as the proving provider and its behaviour pinned by characterization tests. Binance, OKX, PaperBroker, `hitnrun2` and `engulfing` all stay. MT5 is documented only. No MCP, no deployment-topology change.
+Exness becomes a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`). Before that, the sync pipeline is rebuilt as one shared runner driven by a per-exchange `SyncPolicy`, with Binance as the proving provider and its behaviour pinned by characterization tests. Binance, OKX, PaperBroker and `engulfing` all stay. MT5 is documented only. No MCP, no deployment-topology change.
 
 Source of truth: advice `D:/w/_me/algotrading/plans/reports/advise-261008-1148-exness-api-replacement.md` (§2, §9) and state `...-state.md` (R1-R8, D1-D7, A-i..A-v).
 
@@ -50,7 +50,7 @@ Source of truth: advice `D:/w/_me/algotrading/plans/reports/advise-261008-1148-e
 
 - D1 `POST /api/v1/market-data/sync` `{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000}` returns `status=completed`, `total_bars>=1000`; bar SSE for `XAUUSD%3AEXNESS` emits `"is_in_progress": true` within 60 s in market hours; quote SSE emits a `bid`.
 - D2 One min-lot live order per strategy reaches `FILLED` via events WS ≤10 s after ACK and appears in `GET /api/v1/trading/positions`.
-- D3 `hitnrun2` and `engulfing` Exness backtests finish (`status=finished`) with ≥1 trade; PaperBroker has `spread`.
+- D3 `engulfing` Exness backtests finish (`status=finished`) with ≥1 trade; PaperBroker has `spread`.
 - D4 `engine/market_data/sync_internals/` absent; `app/di` has 3 provider modules; market-data routes in 2 files; `scripts/code_metrics.py` tiny share ≤0.30, delegations ≤20.
 - D5 `docs/code-standards.md` rewritten, no stale status claims; `uv run lint-imports` → `Contracts: 3 kept, 0 broken.`
 - D6 Binance/OKX characterization + existing tests green with unchanged pass counts; full gate green; CI deploy (incl. `11-verify.sh`) green.
@@ -1095,7 +1095,7 @@ Spread-aware CFD backtests for both strategies on Exness bars, then one minimum-
 - **Goal:** D3.
 - **Target files and symbols:** `POST /api/v1/backtest/run`, `GET /api/v1/backtest/{run_id}`, `GET /api/v1/backtest/{run_id}/trades`.
 - **Steps:**
-  1. `hitnrun2` on `XAUUSD:EXNESS` `1m`, last 90 days; `engulfing` on `XAUUSD:EXNESS` `1h`, last 365 days; body includes `"initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":<median_spread_XAUUSD from findings>`.
+  1. `engulfing` on `XAUUSD:EXNESS` `1h`, last 365 days; body includes `"initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":<median_spread_XAUUSD from findings>`.
   2. Poll `GET /api/v1/backtest/{request_id}` every 10 s until `status` is `finished` or `failed`.
   3. If a run has 0 trades, repeat on `EURUSD:EXNESS` then `BTCUSD:EXNESS`; record all runs in `reports/validation-results.md` (run id, symbol, interval, spread, total_return, trades).
 - **Success criteria:** each strategy has ≥1 finished run with trades.
@@ -1112,7 +1112,7 @@ Spread-aware CFD backtests for both strategies on Exness bars, then one minimum-
 - **Goal:** D2.
 - **Target files and symbols:** `POST /api/v1/strategies/{code}/subscriptions`, `POST /api/v1/subscriptions/{sub_id}/start`, `GET /api/v1/trading/positions`; logs `exness.order_submitted`, `order_filled`, `exness.venue_close`.
 - **Steps:**
-  1. Create + start `hitnrun2` on `XAUUSD:EXNESS` `1m` and `engulfing` on `XAUUSD:EXNESS` `1h`.
+  1. Create + start `engulfing` on `XAUUSD:EXNESS` `1h`.
   2. Do not deploy or restart the app while a validation position is open (in-memory position map).
   3. On each first `exness.order_submitted`: read `lots` and `sl` from the log line. If `lots` > `EXNESS_MAX_LOTS` or no SL: stop both subscriptions immediately (`POST /subscriptions/{id}/stop`) and STOP and ask the user.
   4. If every signal is rejected with `volume below minimum lot`: STOP and ask the user (sizing vs. minimum lot is a money decision).

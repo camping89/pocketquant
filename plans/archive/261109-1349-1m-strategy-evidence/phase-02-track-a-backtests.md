@@ -47,7 +47,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 **Target files and symbols:** `POST /api/v1/backtest/run`, `GET /api/v1/backtest/{id}`.
 
 **Steps:**
-1. KEY. Write BTRUN from plan.md to `.cache/f.py` with `<LOW>` replaced by `None`.
+1. KEY. Write BTRUN from plan.md to `.cache/f.py`.
 2. For each label in `r1`, `r2`, `r3`, `r4`, in order:
    - If the report already has `run=<label> set=... status=finished`, skip the label.
    - If it has only `run=<label> set=<set> id=<id>`, poll: PRODPY-ARG `<label> <id>`.

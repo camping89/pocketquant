@@ -99,7 +99,6 @@ flowchart LR
 
 - [ ] `Interval("1m").periods_per_year == 525600`; `1w == 52.14`; interval lạ → không raise.
 - [ ] `sharpe_ratio` keyword-only param; NEW unit test pass (known→known).
-- [ ] Backtest `hitnrun2` 1m: |Sharpe| < ~10.
 - [ ] `total_return`/`cagr`/`max_drawdown`/`win_rate`/`profit_factor` **byte-identical** trước/sau (assert trên fixture).
 - [ ] `_current_equity` KHÔNG bị MTM ghi (assert: realized accounting nguyên).
 - [ ] equity_curve persist ≤ 5000 điểm; doc < 16MB; backtest 1m dài không OOM/throw.

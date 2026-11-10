@@ -26,7 +26,7 @@
 - `backtest/models/backtest_config.py` + `backtest/models/__init__.py` (rỗng) → xoá cả thư mục `backtest/models/`.
 
 **Tests**
-- Grep `backtest.models.backtest_config` trong `tests/` → update path sang `core.domain.backtest`. (`test_backtest_app_service_persistence`, `test_engulfing_backtest`, `test_hitnrun2_backtest` khả năng dùng.)
+- Grep `backtest.models.backtest_config` trong `tests/` → update path sang `core.domain.backtest`. (`test_backtest_app_service_persistence`, `test_engulfing_backtest` khả năng dùng.)
 
 ## Steps
 1. Move file → `core/domain/backtest/config.py`; export ở `__init__`.

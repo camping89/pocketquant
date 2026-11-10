@@ -24,7 +24,7 @@ Triple Screen is the first multi-timeframe consumer: one strategy file and one r
 - C10: Triple Screen is the first consumer only; nothing Triple-Screen-specific goes into platform or UI code. Its names live only in its strategy file, its tests and the registry entry.
 - Contract C7 snapshot shape: `readings[{interval, name, value, ok}]`, `decision{action, reason}`; the engine adds `bar_start`, `interval`, `outcome`, `pending`.
 - Governance `docs/governance/no-look-ahead-rules.md:7-9,19-22`: read only HTF bars closed by the decision bar's close; check the first entry bar of each HTF bucket; compare indicator values, not only entry flags; warm up until every HTF indicator is defined.
-- Style model on HEAD (deleted in Phase 05): `src/pocketquant/core/domain/strategy/services/hitnrun2_strategy_service.py:25-129` (`__init__` validation with `ValueError` `:36-38`, `on_order_filled` resets on the opposite side `:98-104`, `on_order_rejected` `:106-107`, `Signal` build `:118-129`). Base class `strategy_service_interface.py:16-43` (`_open_direction`, `restore_direction`). `Bar` fields `close`, `volume`, `datetime` (`src/pocketquant/core/domain/bar/entities.py:22-34`).
+- Base class `strategy_service_interface.py:16-43` (`_open_direction`, `restore_direction`). `Bar` fields `close`, `volume`, `datetime` (`src/pocketquant/core/domain/bar/entities.py:22-34`).
 - No indicator library exists in `src` (`git grep -n -i "def ema\|macd" -- src` prints nothing); EMA and MACD are computed inline in the strategy file.
 - <!-- Red team 2026-11-01: #15 --> Tests: this phase needs no strategy double. The shared `ScriptedStrategy` (`tests/strategy_doubles.py`, Phase 05) and the `probe_registry` fixture serve the engine tests. The one rubric degrees-of-freedom test is Phase 06's (`tests/scripts/rubric/test_static_audit.py`, over the probe); this phase adds no second rubric test and no registry-pinning test (A2 already checks the registry keys).
 - Backtest test pattern on HEAD: `tests/backtest_test/test_backtest_single_run_direct_task.py:94-127` (`_seed_bars`, `_execution`, `_cmd_svc`, `_command`) and `:135-160` (`execute_and_persist`, status `finished`); fixture `database` `tests/backtest_test/conftest.py:38-50` (clears backtest collections, not bars).
@@ -131,7 +131,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 **Target files and symbols:** all files of this phase.
 
 **Steps:**
-1. A2: `git grep -n -E "hitnrun2|engulfing_pullback30|engulfing_detector|\"engulfing\"" -- src tests scripts | wc -l` prints `0`, and `uv run python -c "from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY; print(list(STRATEGY_REGISTRY))"` prints `['triple_screen']`.
+1. A2: `git grep -n -E "engulfing_pullback30|engulfing_detector|\"engulfing\"" -- src tests scripts | wc -l` prints `0`, and `uv run python -c "from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY; print(list(STRATEGY_REGISTRY))"` prints `['triple_screen']`.
 2. AGNOSTIC prints `0`.
 3. GATES and FULLSUITE (raise the metric ceiling in its own commit only if the ratchet alone fails).
 4. Commit `feat(strategy): add the triple screen strategy`; push `develop`; run the CLOSE check.

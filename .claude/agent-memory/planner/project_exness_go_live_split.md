@@ -12,7 +12,6 @@ User decisions from validation session 1 on 2026-10-10 for `plans/261009-0858-ex
 - `:OKX` market-data symbols are migrated to `:BINANCE` (OKX is broker-only). The migration requires a backup and user approval.
 - Follow-up answers:
   - Async fill wiring is Exness-only, through `IBroker.fills_async`, and OKX stays byte-identical.
-  - `hitnrun2` resets on every path where a signal does not end in a fill, including risk rejection and zero size.
   - Exness 429s are never retried automatically, following the spec literally. Transport-error retries with the same idempotency key are allowed.
   - The daily loss cap counts close, swap_fee, admin_fee and dividend deals plus commission, and excludes balance deals.
 

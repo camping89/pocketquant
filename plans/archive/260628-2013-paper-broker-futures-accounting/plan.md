@@ -50,7 +50,7 @@ available_balance = _balance                            # GIỮ NGUYÊN — khô
 - `available_balance = _balance` (formula giữ nguyên). KHÔNG đổi `_can_afford`, KHÔNG thêm `_compute_free_margin`/`margin_used` tracking.
 
 **Behavior change được thừa nhận (red-team C1/C2):** formula `available_balance = _balance` không đổi, NHƯNG vì futures không trừ notional khỏi `_balance` ở open, **giá trị** `available_balance` khi đang có vị thế mở sẽ cao hơn so với spot buggy hiện tại. Hệ quả:
-- Strategy round-trip 1 vị thế (engulfing, hitnrun2 — đóng trước khi mở mới): khi flat, `available_balance = _balance = full` → sizing **không đổi**.
+- Strategy round-trip 1 vị thế (engulfing — đóng trước khi mở mới): khi flat, `available_balance = _balance = full` → sizing **không đổi**.
 - Pyramiding / multi-symbol (size entry chồng khi đang có vị thế mở): spot buggy hiện cho `available ~0` (chicken-egg sẵn có) → size~0; futures cho `available = full` → size bình thường. Đây là hành vi **đúng** cho futures (margin không tiêu cash), nhưng là behavior change so với code buggy. Không có strategy hiện tại pyramiding → tác động forward thực tế = 0; flag để maintainer biết.
 
 **Cảnh báo delta (tránh tạo bug mới):** `PositionAggregate.reduce_quantity` cộng dồn vào `self.realized_pnl` (cumulative). Nếu `_balance += live.realized_pnl` thì partial-close lần 2 cộng lại cumulative → triple-count. Phải capture delta trong broker:
@@ -87,7 +87,7 @@ async with self._lock:
 
 ## Implementation Delta (post-plan)
 
-Red-team C3/C7 chốt giữ `_can_afford` nguyên. Code review sau implement nâng lại latent High: dưới futures, BUY cover một SHORT có cover-notional > balance bị `_can_afford` REJECT → kẹt vị thế (inert hôm nay vì engulfing/hitnrun2 đóng short qua SL/TP synthetic exit, bypass `_can_afford`). **User chốt thêm minimal guard now:** `_can_afford` trả `True` khi BUY reduce/cover SHORT đang mở (cover không tiêu margin). KHÔNG đổi sizing/round-trip hiện tại; thêm test `test_losing_short_cover_not_blocked_by_affordability` + docs note. Đây là delta có chủ đích so với plan scope gốc.
+Red-team C3/C7 chốt giữ `_can_afford` nguyên. Code review sau implement nâng lại latent High: dưới futures, BUY cover một SHORT có cover-notional > balance bị `_can_afford` REJECT → kẹt vị thế (inert hôm nay vì engulfing đóng short qua SL/TP synthetic exit, bypass `_can_afford`). **User chốt thêm minimal guard now:** `_can_afford` trả `True` khi BUY reduce/cover SHORT đang mở (cover không tiêu margin). KHÔNG đổi sizing/round-trip hiện tại; thêm test `test_losing_short_cover_not_blocked_by_affordability` + docs note. Đây là delta có chủ đích so với plan scope gốc.
 
 ## Dependencies
 

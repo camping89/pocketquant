@@ -11,7 +11,7 @@ dependencies: []
 
 ## Goal
 
-The plan is on `origin/develop`; the existing context tests prove the closed-bucket rule for a 1m entry; prod shows the gold spec Track A and B rely on, the A6 baseline of the three existing subscriptions, live disarmed, and 1m, 5m, 15m and 1h coverage good enough for the 12-month window.
+The plan is on `origin/develop`; the existing context tests prove the closed-bucket rule for a 1m entry; prod shows the gold spec Track A relies on, the A6 baseline of the three existing subscriptions, live disarmed, and 1m, 5m, 15m and 1h coverage good enough for the 12-month window.
 
 ## Context
 
@@ -93,7 +93,7 @@ print(f"spec commission_per_contract={c.get('commission_per_contract')} spread={
 
 ### Task 01.4 — Coverage of 1m, 5m, 15m and 1h over the window (read-only)
 
-**Goal:** the four Track A intervals (and the hitnrun2 1m entry) are covered over `2025-11-09..2026-11-09`, and each top interval has 36 bars before it.
+**Goal:** the four Track A intervals are covered over `2025-11-09..2026-11-09`, and each top interval has 36 bars before it.
 
 **Target files and symbols:** prod `bars`; `TradingCalendarFactory.get`, `trading_minutes`, `bar_start`.
 

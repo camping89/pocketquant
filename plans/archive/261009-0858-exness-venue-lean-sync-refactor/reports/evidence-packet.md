@@ -21,7 +21,7 @@ Verify every file path, symbol, and command you put in the plan against the repo
 
 ## Confirmed scope (from the accepted advice — do not reopen)
 
-- Keep Binance, OKX, PaperBroker and both strategies (`hitnrun2`, `engulfing`). Nothing deleted except the job modules / `sync_internals` / DI files / route files the refactor replaces.
+- Keep Binance, OKX, PaperBroker and the `engulfing` strategy. Nothing deleted except the job modules / `sync_internals` / DI files / route files the refactor replaces.
 - Exness REST + WS now (data provider, realtime quote provider, broker). MT5 = documented future provider only. No MCP. No deployment topology change.
 - Order: Phase 0 read-only spike → refactor with Binance as the proving provider (characterization tests first) → Exness adapters as policy #2 → validation (spread param in PaperBroker, backtests, min-lot live round trip per strategy) → docs.
 - Done means D1-D7 and success metrics exactly as in the advice report section 9 and the handoff brief.

@@ -67,7 +67,7 @@ These rules fix the main stall modes. They go in `plan.md` once, and each phase 
   3. `[ASK]` Push `master`. The question states the computed facts:
      - the number of open paper positions, from `positions` with `closed_at: null` for the two validation subscription ids (`01a15754-39ed-…`, `01a15754-3ab5-…`, venue `phase-08…md:271`);
      - the next E2 row time (venue `phase-08…md:260-264`);
-     - the warmup cost: hitnrun2 needs about 8 open-market hours and engulfing about 21 [V packet];
+     - the warmup cost: engulfing needs about 21 open hours [V packet];
      - my suggested window: Sat 2026-10-24 after the row 2 check (03:00Z) and before the Sunday reopen.
   4. Run the current step 4 checks with one change. The user's SPA check uses Pause then Resume (with confirm) to test the token prompt and a mutation. It does not stop or start a validation subscription, because a stop loses strategy state (`plan.md:66`, B11) and would reset the E2 paper run.
   5. Add one line to `reports/ship-log.md` with the deploy time and the `StartedAt` of `pocketquant-app`, for the E2 C1 row.
@@ -156,7 +156,7 @@ These rules fix the main stall modes. They go in `plan.md` once, and each phase 
    - E2 rows 3 and 4 then validate the code that will go live, including Phase 03's client change. C3 must send the token after the deploy (venue `:185` already says so).
 2. **Order for the earliest safe first live trade.**
    - All code and tunnel work (01-09) finishes inside E2's calendar, so 2026-11-02 becomes the arming day and not the ship day.
-   - The earliest live fill is 2026-11-02 plus the strategy warmup on a fresh `exness` subscription: about 8 open hours for hitnrun2 and about 21 for engulfing. No preload exists [V packet].
+   - The earliest live fill is 2026-11-02 plus the strategy warmup on a fresh `exness` subscription: about 21 open hours for engulfing. No preload exists [V packet].
    - It is not worth folding the flag-on into deploy B. The flag would sit on for about 9 days with the deep backfill blocked (`docs/deployment.md:241`), and flag-on is a real-money gate that belongs right before the swap.
    - So three deploys, of which two land before E2 closes.
    - Going live before E2 closes would reverse the plan's E2 prerequisite (`plan.md:27`). Only the user can do that.

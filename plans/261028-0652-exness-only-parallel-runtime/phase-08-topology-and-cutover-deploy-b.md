@@ -488,7 +488,7 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
    async def main() -> None:
        db = Database()
        await db.connect(get_settings())
-       sub = Subscription(id=generate_id(), strategy_code="hitnrun2", symbol="BTCUSDT:BINANCE",
+       sub = Subscription(id=generate_id(), strategy_code="engulfing", symbol="BTCUSDT:BINANCE",
                           interval=Interval.MINUTE_1, created_at=datetime.now(UTC),
                           desired_state="running", actual_state="stopped")
        await SubscriptionRepository(db).add(sub)

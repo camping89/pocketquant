@@ -15,7 +15,7 @@ created: 2026-10-09
 # Exness venue + lean sync refactor
 
 ## Overview
-The ports `IDataProvider`, `IRealtimeQuoteProvider`, `IBroker` and `IStrategy` stay the seams. The work runs in this order. First a read-only Exness spike runs. Then the sync pipeline is refactored with Binance as the proving provider and pinned by characterization tests, giving one `SyncPolicy` per provider and one shared runner. DI, routes and scalar Query/Command wrappers are collapsed, and `docs/code-standards.md` is rewritten. After that Exness becomes policy #2 and a third live venue (data, quotes, broker). Validation uses a PaperBroker `spread` parameter, backtests and a minimum-lot live round trip, and docs come last. Binance, OKX, PaperBroker, `hitnrun2` and `engulfing` all stay. MT5 is only documented. Nothing is built for MCP, and the deployment topology does not change.
+The ports `IDataProvider`, `IRealtimeQuoteProvider`, `IBroker` and `IStrategy` stay the seams. The work runs in this order. First a read-only Exness spike runs. Then the sync pipeline is refactored with Binance as the proving provider and pinned by characterization tests, giving one `SyncPolicy` per provider and one shared runner. DI, routes and scalar Query/Command wrappers are collapsed, and `docs/code-standards.md` is rewritten. After that Exness becomes policy #2 and a third live venue (data, quotes, broker). Validation uses a PaperBroker `spread` parameter, backtests and a minimum-lot live round trip, and docs come last. Binance, OKX, PaperBroker and `engulfing` all stay. MT5 is only documented. Nothing is built for MCP, and the deployment topology does not change.
 
 ## Goals
 - G1: Exness is a live venue next to Binance/OKX. It uses the same strategies, risk checks and position tracking, and the SPA needs no change.
@@ -43,7 +43,7 @@ The ports `IDataProvider`, `IRealtimeQuoteProvider`, `IBroker` and `IStrategy` s
 ## Success criteria (D1–D7)
 - D1: `POST /api/v1/market-data/sync` with `{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000,"source":"rest_backfill"}` returns `total_bars >= 1000`. The SSE bars stream for `XAUUSD%3AEXNESS` emits `"is_in_progress": true` within 60 s during market hours, and the quote stream emits `"bid"`.
 - D2: One minimum-lot live Exness order per strategy, with SL attached, logs `exness.order_filled` with `ack_to_fill_ms <= 10000`. The position appears in `GET /api/v1/trading/positions` and in the SPA.
-- D3: `hitnrun2` and `engulfing` backtests on Exness bars reach `finished` in `backtest_runs`, with a non-empty trades list. `PaperBroker` has a `spread` parameter.
+- D3: `engulfing` backtests on Exness bars reach `finished` in `backtest_runs`, with a non-empty trades list. `PaperBroker` has a `spread` parameter.
 - D4: `engine/market_data/sync_internals/` is gone. `app/di` has 3 provider modules, and market-data routes live in 2 files. `scripts/code_metrics.py` reports tiny share ≤ 0.30 and delegations ≤ 20, or whatever values the user decides at the Phase 05 gate.
 - D5: `docs/code-standards.md` is rewritten with no stale status claims, and `uv run lint-imports` prints `Contracts: 3 kept, 0 broken.`.
 - D6: Binance, OKX and PaperBroker tests keep the same pass count as the Phase 02 baseline. `just test`, ruff, pyright and lint-imports are green, and the CI deploy is green (`11-verify.sh` 19 checks).
@@ -1653,23 +1653,22 @@ Make D3 and D2 true. CFD backtests must account for the spread, and each strateg
   - 1m: EURUSD and XAUUSD ≥ 60000, BTCUSD ≥ 120000
   - 1h: EURUSD and XAUUSD ≥ 8000, BTCUSD ≥ 16000
 
-### T8.5 Backtests of both strategies on Exness bars
+### T8.5 Backtests of the strategy on Exness bars
 - **Goal:** D3 holds.
 - **Target files and symbols:** `POST /api/v1/backtest/run`, `GET /api/v1/backtest/{run_id}`, `GET /api/v1/backtest/{run_id}/trades?limit=1`
 - **Steps:**
-  1. For each `S` in XAUUSD, EURUSD and BTCUSD, post two runs, using `SPREAD_S` = the journal's median spread for S:
-     - `{"strategy_id":"hitnrun2","symbol":"S:EXNESS","interval":"1m","start_date":"<now-30d ISO, minute precision>","end_date":"<now ISO>","initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":SPREAD_S}`
+  1. For each `S` in XAUUSD, EURUSD and BTCUSD, post one run, using `SPREAD_S` = the journal's median spread for S:
      - `{"strategy_id":"engulfing","symbol":"S:EXNESS","interval":"1h","start_date":"<now-365d>","end_date":"<now>","initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":SPREAD_S}`
   2. Record each `request_id`. Poll `GET /api/v1/backtest/{id}` every 60 s (at most 30 times per run) until `status` is not `started`.
   3. Write `exness-backtest-results.md` with one table row per run: strategy, symbol, run_id, status, trade count (from `/trades`), total return and max drawdown.
-- **Success criteria:** All 6 runs are `finished`, and each strategy has at least one run with trades.
-- **Verify:** Each `GET /api/v1/backtest/{id}` contains `"status":"finished"`. For each strategy, at least one `GET .../trades?limit=1` returns a non-empty JSON list (`python -c "import json,sys;print(len(json.load(sys.stdin))>0)"` prints `True`).
+- **Success criteria:** All 3 runs are `finished`, and at least one run has trades.
+- **Verify:** Each `GET /api/v1/backtest/{id}` contains `"status":"finished"`. At least one `GET .../trades?limit=1` returns a non-empty JSON list (`python -c "import json,sys;print(len(json.load(sys.stdin))>0)"` prints `True`).
 
 ### T8.6 Live risk-cap precondition (stop-and-ask gate)
 - **Goal:** Live money moves only under the user's explicit, recorded consent.
 - **Target files and symbols:** `.../reports/user-preconditions.md`
 - **Steps:**
-  1. Ask the user verbatim: "U3: Is EXNESS_DAILY_LOSS_CAP set in pocketquant-config and deployed, with EXNESS_MAX_LOTS unset so orders use the minimum lot, and do you approve starting one live Exness subscription per strategy (hitnrun2 on XAUUSD:EXNESS 1m, engulfing on EURUSD:EXNESS 1h)?"
+  1. Ask the user verbatim: "U3: Is EXNESS_DAILY_LOSS_CAP set in pocketquant-config and deployed, with EXNESS_MAX_LOTS unset so orders use the minimum lot, and do you approve starting one live Exness subscription (engulfing on EURUSD:EXNESS 1h)?"
   2. Append `U3: approved` or `U3: declined` to `user-preconditions.md`. On `declined`, STOP.
   3. If the user wants a lot size above the minimum, STOP. That is a stop-and-ask condition outside this plan.
 - **Success criteria:** Approval is recorded.
@@ -1679,14 +1678,13 @@ Make D3 and D2 true. CFD backtests must account for the spread, and each strateg
 - **Goal:** D2 holds.
 - **Target files and symbols:** `POST /api/v1/strategies/{code}/subscriptions`, `POST /api/v1/subscriptions/{id}/start`, `GET /api/v1/trading/positions`, `GET /api/v1/trading/orders`, `GET /api/v1/subscriptions/{id}/trades`, container logs
 - **Steps:**
-  1. Using the remote pattern, create the two subscriptions:
+  1. Using the remote pattern, create the subscription:
      ```bash
-     curl -s -X POST http://localhost:41921/api/v1/strategies/hitnrun2/subscriptions -H "Content-Type: application/json" -d '{"symbol":"XAUUSD:EXNESS","interval":"1m","broker":"exness"}'
      curl -s -X POST http://localhost:41921/api/v1/strategies/engulfing/subscriptions -H "Content-Type: application/json" -d '{"symbol":"EURUSD:EXNESS","interval":"1h","broker":"exness"}'
      ```
-     Record the returned `id`s, then `POST /api/v1/subscriptions/<id>/start` for each.
+     Record the returned `id`, then `POST /api/v1/subscriptions/<id>/start`.
   2. Every 4 hours during market hours, for at most 5 trading days, run `ssh -i "$KEY" "$HOST" "docker logs pocketquant-app --since 5h 2>&1 | grep -E 'exness\.(order_submitted|order_filled|order_rejected_async|position_closed_by_broker|lots_clamped)'"`. If 5 trading days pass without a fill for a strategy, STOP and report to the user. A missing signal is not a code failure.
-  3. Whenever an `exness.order_submitted` line has `volume` different from `volume_min`, STOP at once, stop both subscriptions with `POST /api/v1/subscriptions/<id>/stop`, and ask the user. That is the stop-and-ask condition.
+  3. Whenever an `exness.order_submitted` line has `volume` different from `volume_min`, STOP at once, stop the subscription with `POST /api/v1/subscriptions/<id>/stop`, and ask the user. That is the stop-and-ask condition.
   4. After the fill, `curl -s http://localhost:41921/api/v1/trading/positions` must show the subscription id. After the exit, `curl -s http://localhost:41921/api/v1/subscriptions/<id>/trades` must be non-empty.
 - **Success criteria:** Each strategy has one entry fill, a position, and an exit.
 - **Verify:** For each strategy:

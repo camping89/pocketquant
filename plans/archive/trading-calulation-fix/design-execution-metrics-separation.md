@@ -119,7 +119,7 @@ Broker phát `Trade{entry=100.10, exit=103.896, qty=10, pnl(gross)=37.96, commis
 - Metrics ở `core`, `build(trades, equity)` chạy cho backtest **và** (tương lai) forward. `backtest/domain/services` rỗng.
 - 1 nguồn commission (broker), 1 nguồn PnL (`PositionAggregate`). Không còn `_consumed_pnl`/FIFO.
 - `total_return`, final equity, Sharpe/Sortino cùng gồm commission.
-- Backtest `engulfing`/`hitnrun2`: số trades + gross PnL **không đổi**; net khác do commission model; equity khớp broker balance.
+- Backtest `engulfing`: số trades + gross PnL **không đổi**; net khác do commission model; equity khớp broker balance.
 - `just test` + `ruff` + `pyright` + `lint-imports` (7 contracts) pass.
 
 ## 9. Next steps

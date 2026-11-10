@@ -17,7 +17,7 @@ Run on or after Mon 2026-11-02 03:00Z (10:00 Bangkok), after the first post-DST 
 
 ## Context
 - Source: plan `archive/261009-0858-exness-venue-lean-sync-refactor`, Phase 08, T8.7 row 4 and the C5 description. The commands below are copied from there; C1, C2 and C5 were tested in prod on 2026-10-19 and C3 on 2026-10-20.
-- Paper subscription ids started in that plan's T8.6: hitnrun2 XAUUSD 1m `01a15754-39ed-73e3-921e-df085eb4a786`, engulfing EURUSD 1h `01a15754-3ab5-7258-b46b-ad98e1f3471f`. Both were stopped on 2026-10-26 (that plan's T8.8), so C2 is expected to print `running 0`.
+- Paper subscription id started in that plan's T8.6: engulfing EURUSD 1h `01a15754-3ab5-7258-b46b-ad98e1f3471f`. It was stopped on 2026-10-26 (that plan's T8.8), so C2 is expected to print `running 0`.
 - `SINCE` for C1: the last "checked at" in that plan's T8.7 results table.
 
 ## Commands

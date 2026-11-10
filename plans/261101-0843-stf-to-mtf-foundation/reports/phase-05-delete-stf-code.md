@@ -4,10 +4,10 @@ Entry gate: `dirty=0 synced=yes`, phase 04 report `Result: PASS`, `tsc=0`, `dock
 
 ## Deleted files (`git show --stat HEAD`, `f3bb9e64`)
 
-- `src/pocketquant/core/domain/strategy/services/hitnrun2_strategy_service.py`, `engulfing_strategy_service.py`, `engulfing_pullback30_touch_strategy_service.py`
+- `src/pocketquant/core/domain/strategy/services/engulfing_strategy_service.py`, `engulfing_pullback30_touch_strategy_service.py`
 - `src/pocketquant/core/domain/strategy/patterns/__init__.py`, `engulfing_detector.py`
-- `tests/core_test/unit/domain/strategy/test_hitnrun2.py`, `test_engulfing.py`, `test_engulfing_pullback30_touch.py`, `patterns/test_engulfing_detector.py`, `patterns/engulfing_golden_fixture.json`
-- `tests/backtest_test/engine/test_hitnrun2_backtest.py`, `test_engulfing_backtest.py`, `test_engulfing_pullback30_touch_backtest.py`
+- `tests/core_test/unit/domain/strategy/test_engulfing.py`, `test_engulfing_pullback30_touch.py`, `patterns/test_engulfing_detector.py`, `patterns/engulfing_golden_fixture.json`
+- `tests/backtest_test/engine/test_engulfing_backtest.py`, `test_engulfing_pullback30_touch_backtest.py`
 - `docs/swing-pivot-key-level.md`
 
 Totals: `51 files changed, 173 insertions(+), 2483 deletions(-)`. Created `tests/strategy_doubles.py` (`ScriptedStrategy`) and the `probe_registry` fixture in `tests/conftest.py`.

@@ -29,19 +29,17 @@ dependencies: []
 
 ## Architecture
 
-`IStrategy` là public contract (ABC). Rename phải đồng bộ 3 nơi: (1) abstract/định nghĩa, (2) implementation `hitnrun2`, (3) call-site trong orchestrator. Tests gọi trực tiếp method cũng phải đổi.
+`IStrategy` là public contract (ABC). Rename phải đồng bộ 2 nơi: (1) abstract/định nghĩa, (2) call-site trong orchestrator. Tests gọi trực tiếp method cũng phải đổi.
 
-**⚠ Collision phải tránh:** KHÔNG đụng `BacktestResultCollector.on_fill(result)` — đó là method KHÁC (consumer callback của broker, nhận `OrderResult`, không thuộc `IStrategy`). Chỉ rename `on_fill` thuộc `IStrategy`/`hitnrun2`.
+**⚠ Collision phải tránh:** KHÔNG đụng `BacktestResultCollector.on_fill(result)` — đó là method KHÁC (consumer callback của broker, nhận `OrderResult`, không thuộc `IStrategy`). Chỉ rename `on_fill` thuộc `IStrategy`.
 
 ## Related Code Files
 
 - Modify: `src/pocketquant/core/domain/strategy/interfaces.py` — 3 abstract `def` + docstring (`on_bar:37`, `on_tick:48`, `on_fill:62`) + lifecycle list dòng 17.
-- Modify: `src/pocketquant/core/domain/strategy/services/hitnrun2.py` — `on_bar`→`on_bar_completed` (dòng 71), `on_fill`→`on_order_filled` (dòng 114) + docstring module dòng 15.
 - **Modify (RED-TEAM CRIT): `src/pocketquant/engine/app_services/strategy_app_service.py`** — HAI việc:
   - `class _DefaultStrategy(IStrategy)` định nghĩa `async def on_bar` tại **dòng 383** → rename `on_bar_completed`. Đây là abstract override; nếu sót → `TypeError: Can't instantiate abstract class` khi `_DefaultStrategy(config)` ở `load_strategy:102` (live default path, không test nào cover).
   - Call-site: `strategy.on_bar(bar)` (dòng 230) → `on_bar_completed`; `strategy.on_tick(tick)` (dòng 255) → `on_quote_received`. Handler `_on_bar_completed`/`_on_quote_received` GIỮ NGUYÊN tên (đúng quy ước event-handler).
 - **Modify (RED-TEAM): `tests/engine_test/strategy_injection_roundtrip_characterization_test.py:65`** — `class _CountingStrategy(IStrategy)` có `async def on_bar` (abstract override) → rename.
-- Modify: `tests/core_test/unit/domain/strategy/test_hitnrun2.py` — nhiều `s.on_bar(...)`/`s.on_fill(...)` (dòng 83-222) → rename gọi.
 - Do NOT touch: `tests/backtest_test/engine/test_result_collector_fifo.py:81` (`collector.on_fill(fill)` — là collector).
 - Do NOT list (RED-TEAM: phantom): `tests/engine_test/test_strategy_handlers_declarative.py` — KHÔNG có hook reference nào (chỉ test subscription CRUD). Bỏ khỏi scope Phase 1.
 
@@ -50,15 +48,14 @@ dependencies: []
 1. Grep **cả `def` lẫn call** (red-team: grep `.on_bar(` bỏ sót abstract override `def on_bar`):
    `grep -rn "def on_bar\b\|def on_tick\b\|def on_fill\b\|\.on_bar(\|\.on_tick(\|\.on_fill(\|(IStrategy)" src/ tests/` → phân loại: IStrategy subclass def / call-site / collector-callback (giữ).
 2. Đổi `interfaces.py`: 3 abstract def + docstring + lifecycle comment dòng 17.
-3. Đổi `hitnrun2.py`: 2 method def + module docstring.
-4. Đổi `strategy_app_service.py`: `_DefaultStrategy.on_bar:383` (def) + 2 call-site (bar:230, tick:255).
-5. Đổi `_CountingStrategy.on_bar:65` (test) + `test_hitnrun2.py` gọi hook.
-6. `just types` để bắt sót (mypy báo abstract-not-implemented + method-not-found).
+3. Đổi `strategy_app_service.py`: `_DefaultStrategy.on_bar:383` (def) + 2 call-site (bar:230, tick:255).
+4. Đổi `_CountingStrategy.on_bar:65` (test).
+5. `just types` để bắt sót (mypy báo abstract-not-implemented + method-not-found).
 
 ## Success Criteria
 
 - [ ] `grep -rn "def on_bar\b\|\.on_bar(\|def on_fill\b" src/` chỉ còn handler `_on_*` và `collector.on_fill`; không còn hook cũ.
-- [ ] `IStrategy.on_order_filled` tồn tại; `on_fill` không còn trong `IStrategy`/`hitnrun2`/`_DefaultStrategy`.
+- [ ] `IStrategy.on_order_filled` tồn tại; `on_fill` không còn trong `IStrategy`/`_DefaultStrategy`.
 - [ ] `_DefaultStrategy` + `_CountingStrategy` instantiate được (không abstract error).
 - [ ] `BacktestResultCollector.on_fill` vẫn nguyên.
 - [ ] `just types` xanh; tests collect/pass.

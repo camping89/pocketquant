@@ -50,7 +50,7 @@ scripts/rubric/
 - [ ] 4 format render từ cùng list results, nhất quán số liệu.
 - [ ] HTML mở bằng browser (file://) hiển thị đủ, không cần network.
 - [ ] Comparison table xếp hạng đúng theo overall; caveat + rubric_version ở header mọi format.
-- [ ] Diagnosis text đúng: `hitnrun2`→"cost-killed", `engulfing`→"no directional edge".
+- [ ] Diagnosis text đúng: `engulfing`→"no directional edge".
 - [ ] JSON re-parse thành dict hợp lệ, có aliases (dedup) + version.
 
 ## Risk Assessment

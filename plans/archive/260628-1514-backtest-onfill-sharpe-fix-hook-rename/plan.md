@@ -26,9 +26,9 @@ source: skill
 
 ## Overview
 
-Sửa 2 bug ở **app/engine code** (không phải `hitnrun2`) từ audit live VPS. Nguồn: `plans/reports/diagnostic-vps-backtest-health-260628-1417-hitnrun2-onfill-sharpe-bugs-report.md`. Plan này **đã redesign sau red-team** (3 reviewer, 4 Critical findings).
+Sửa 2 bug ở **app/engine code** từ audit live VPS. Plan này **đã redesign sau red-team** (3 reviewer, 4 Critical findings).
 
-- **Bug #1 (P1):** `strategy.on_fill` có 0 call-site → `hitnrun2._open_direction` kẹt sau lệnh đầu → backtest cap 1 trade.
+- **Bug #1 (P1):** `strategy.on_fill` có 0 call-site → `_open_direction` của strategy kẹt sau lệnh đầu → backtest cap 1 trade.
 - **Bug #2 (P1):** Sharpe/Sortino annualize hằng số `365` trên equity_curve sample-theo-event → `-227`, `-30`.
 - **Rename:** `on_bar→on_bar_completed`, `on_tick→on_quote_received`, `on_fill→on_order_filled`.
 
@@ -58,7 +58,7 @@ flowchart TD
         H["★ @event_handler(OrderFilledEvent)<br/>route theo subscription_id<br/>→ strategy.on_order_filled(side, fill_price)"]
     end
     subgraph ST["strategy (by id)"]
-        S["hitnrun2.on_order_filled<br/>reset _open_direction nếu opposite-side"]
+        S["strategy.on_order_filled<br/>reset _open_direction nếu opposite-side"]
     end
     F1 --> EV
     F2 --> EV
@@ -69,7 +69,7 @@ flowchart TD
 ```
 
 **Vì sao routing này đúng (verified):**
-- `Signal.subscription_id = strategy.id` (`hitnrun2.py:141`) → `Order.subscription_id` → `OrderFilledEvent.subscription_id` = key trong `self._strategies`. Match cho cả run_single (synthetic id), run_subscription (`{code}::bt::{sub_id}`), live (sub_id).
+- `Signal.subscription_id = strategy.id` → `Order.subscription_id` → `OrderFilledEvent.subscription_id` = key trong `self._strategies`. Match cho cả run_single (synthetic id), run_subscription (`{code}::bt::{sub_id}`), live (sub_id).
 - `OrderFilledEvent.side` = `order.side` (non-optional `OrderSide`) — né Optional gap.
 - Single/subscription backtest do worker drain **tuần tự** (`claim_next`) → không concurrency cross-talk. Grid-opt (semaphore concurrent) thì CÓ cross-talk → Phase 5 xử lý bằng per-run EventBus isolation.
 
@@ -123,7 +123,6 @@ Hai fact lộ ra khi build mà red-team bỏ sót; cả hai cần fix in-scope:
 Verified: `total_trades` 1 (baseline) → 4 (fixed) trên oscillating fixture; grid-opt 0 → N trade/combination; realized metrics byte-identical có/không MTM; Sharpe hợp lý trên dữ liệu realistic-vol; entry+exit `OrderFilledEvent` đều publish; cap cứng kể cả 8000 round-trip.
 
 ### Known edges (documented, không fix lần này)
-- **(review M-1) `HitNRun2._open_direction` có thể kẹt** nếu entry signal sinh ra nhưng order bị risk/size reject (set `_open_direction` optimistic trong `on_bar_completed` trước khi submit). Pre-existing; post-H-1-fix các MARKET entry fill ngay nên reject path hiếm. Follow-up: notify strategy khi signal không fill, hoặc set `_open_direction` chỉ khi fill confirmed.
 - **(review L-1) `realized_pnl` cumulative** có thể double-count nếu partial-reduce nhiều lần cùng lot. Pre-existing; không xảy ra vì strategy full-close qua SL/TP.
 - **Live OKX `on_order_update` chưa wire** vào OKX broker WS callback (0 call-site) → live fill chưa publish `OrderFilledEvent`. Live OFF; verify-only finding, follow-up plan khi bật live.
 
@@ -138,17 +137,15 @@ Trước đây flag "drift cần user quyết". Thực tế lúc verify: `tests/
 
 ## Acceptance criteria
 
-- [x] Backtest `hitnrun2` ra **nhiều trade** (oscillating fixture: 1→4); `_open_direction` reset sau mỗi round-trip.
 - [x] `strategy.on_order_filled` được gọi qua `OrderFilledEvent` — entry (sau fix H-1) + synthetic exit; live cùng cơ chế (handler chung).
 - [x] Synthetic SL/TP exit publish `OrderFilledEvent` mang `subscription_id` + `side`.
 - [x] Sharpe/Sortino: |Sharpe| < ~10 trên dữ liệu realistic-vol; annualize theo interval; `periods_per_year` keyword-only.
 - [x] `total_return`, `cagr`, `max_drawdown`, `win_rate`, `profit_factor` **byte-identical** trước/sau MTM (test pinned).
 - [x] equity_curve persist ≤ 5000 điểm (hard cap, giữ điểm-trade); backtest dài không OOM.
-- [x] Rename đồng bộ: `interfaces.py` + `hitnrun2.py` + `_DefaultStrategy` + `_CountingStrategy` (test) + call-site.
+- [x] Rename đồng bộ: `interfaces.py` + `_DefaultStrategy` + `_CountingStrategy` (test) + call-site.
 - [x] `BacktestResultCollector.on_fill` không đổi.
 - [x] **Grid-opt (Phase 5):** mỗi combination ra `total_trades > 0`; 2+ run concurrent cùng symbol cô lập (test pinned).
 - [x] `ruff`/`pyright` xanh; import-linter 7 contracts KEPT. `just test`: **592 passed, 1 skipped, 0 failed** (ổn định 5 run). OpenAPI snapshot pass (baseline đã regenerate). Re-smoke remote-db: **DONE** (xem dưới).
-- [x] **Re-smoke prod (remote-db, 2026-06-28):** grid-opt `hitnrun2 / BTCUSDT:BINANCE / 1h` 2 combination qua `/backtest/optimize` (synchronous, chạy code local fixed). Kết quả: 2/2 completed, 0 failed; **total_trades 262 & 296** (Bug #1 fixed — trước cap 1); Sharpe **11.25 & 0.83** sane + differentiated (trước -227/-30); live `positions: 0` (sandbox isolation — không phantom). `.env` khôi phục về all-local sau đó.
 
 ## Out of scope
 

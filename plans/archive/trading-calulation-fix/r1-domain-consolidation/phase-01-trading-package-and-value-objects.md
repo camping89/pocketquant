@@ -44,7 +44,7 @@ Tạo package `core.domain.trading`; move `Trade`/`Fill`/`EquityPoint` + `Backte
 ## Success
 - `grep -rn "BacktestMetrics" src/` → rỗng (chỉ còn web TS).
 - `core.domain.trading` export 4 symbol; `core.domain.backtest` không còn Trade/Fill/EquityPoint/PerformanceMetrics.
-- 7 contracts + test xanh; số liệu backtest `engulfing`/`hitnrun2` không đổi.
+- 7 contracts + test xanh; số liệu backtest `engulfing` không đổi.
 
 ## Rủi ro
 - `Fill` dùng ở cả `Order` (backtest) — vòng import trading↔backtest: an toàn (Order import Fill từ trading; trading không import backtest). Nếu pyright báo circular → đặt `from __future__ import annotations` (đã có) + import trực tiếp module.

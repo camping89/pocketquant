@@ -15,7 +15,7 @@ created: 2026-11-01
 
 ## Overview
 
-PocketQuant decides on one timeframe per subscription, and its three strategies (hitnrun2, engulfing, engulfing_pullback30_touch) are single-timeframe (STF). The owner retires STF as a strategic call and wants a generic multi-timeframe (MTF) foundation. A subscription declares an ordered list of intervals (lowest = entry) and generic parameters. On each closed entry bar the engine hands the strategy the higher-timeframe bars that closed strictly before the entry bar's close, read from Mongo through a per-(symbol, interval) cache. The same rule runs in live, warm-up and backtest. Stop entries and strategy exits become platform capabilities. Strategies report a generic snapshot that the UI renders without knowing the strategy. Triple Screen is the first consumer only. Live trading stays disarmed for the whole plan.
+PocketQuant decides on one timeframe per subscription, and its two strategies (engulfing, engulfing_pullback30_touch) are single-timeframe (STF). The owner retires STF as a strategic call and wants a generic multi-timeframe (MTF) foundation. A subscription declares an ordered list of intervals (lowest = entry) and generic parameters. On each closed entry bar the engine hands the strategy the higher-timeframe bars that closed strictly before the entry bar's close, read from Mongo through a per-(symbol, interval) cache. The same rule runs in live, warm-up and backtest. Stop entries and strategy exits become platform capabilities. Strategies report a generic snapshot that the UI renders without knowing the strategy. Triple Screen is the first consumer only. Live trading stays disarmed for the whole plan.
 
 The plan is written for a downstream executor model. Every phase carries tasks with Goal, Target files, Steps, Success criteria and a mechanical Verify, and ends with the same Failure Protocol block.
 
@@ -123,7 +123,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | # | Criterion | Measured by |
 |---|---|---|
 | A1 | Spike go/no-go recorded per piece before the full build | `reports/spike-go-no-go.md` table, every row `go` or an owner [ASK] answer |
-| A2 | No STF code | `git grep -n -E "hitnrun2\|engulfing_pullback30\|engulfing_detector\|\"engulfing\"" -- src tests scripts \| wc -l` prints `0`; `STRATEGY_REGISTRY` keys are `["triple_screen"]` |
+| A2 | No STF code | `git grep -n -E "engulfing_pullback30\|engulfing_detector\|\"engulfing\"" -- src tests scripts \| wc -l` prints `0`; `STRATEGY_REGISTRY` keys are `["triple_screen"]` |
 | A3 | Subscription carries `intervals`, `parameters` and a unique `intervals_key` | Phase 06 tests; prod index list in Phase 15 shows `ix_subscriptions_dedup_intervals` and no `ix_subscriptions_dedup_triple` |
 | A4 | No look-ahead in live, warm-up and backtest | Phase 07 and 08 context tests pass: the first entry bar of a new bucket sees the previous bucket's close; the partial current bucket is never served; backtest contexts equal live at every boundary |
 | A5 | No per-bar context reads | Phase 07 test: two instances on one symbol cause at most one `find` per (symbol, interval) rollover |

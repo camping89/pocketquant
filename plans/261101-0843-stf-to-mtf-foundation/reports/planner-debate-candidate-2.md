@@ -142,15 +142,13 @@ Entry gate: the conventions gate. Rollback: `git revert`. Nothing is deployed.
   2. Add `register(monkeypatch, code="scripted")`, which runs `monkeypatch.setitem(STRATEGY_REGISTRY, code, ScriptedStrategy)`.
   Verify: no verification needed (T3.3 covers it).
 - **T3.2 Delete.** Steps:
-  1. Delete `core/domain/strategy/services/{hitnrun2,engulfing,engulfing_pullback30_touch}_strategy_service.py` and the whole `core/domain/strategy/patterns/` directory.
+  1. Delete `core/domain/strategy/services/{engulfing,engulfing_pullback30_touch}_strategy_service.py` and the whole `core/domain/strategy/patterns/` directory.
   2. Set `STRATEGY_REGISTRY: dict[str, type] = {}` and fix `__all__` (`services/__init__.py:11-22`).
-  3. Delete `tests/core_test/unit/domain/strategy/{test_hitnrun2,test_engulfing,test_engulfing_pullback30_touch}.py`, the folder `tests/core_test/unit/domain/strategy/patterns/` (the test and the Python fixture copy), and `tests/backtest_test/engine/test_{hitnrun2,engulfing,engulfing_pullback30_touch}_backtest.py`.
-  Verify: `git grep -n -E "hitnrun2|engulfing" -- src | wc -l` prints `0`.
+  3. Delete `tests/core_test/unit/domain/strategy/{test_engulfing,test_engulfing_pullback30_touch}.py`, the folder `tests/core_test/unit/domain/strategy/patterns/` (the test and the Python fixture copy), and `tests/backtest_test/engine/test_{engulfing,engulfing_pullback30_touch}_backtest.py`.
+  Verify: `git grep -n -E "engulfing" -- src | wc -l` prints `0`.
 - **T3.3 Repoint tests.** Steps:
   1. Every test that fails because a code no longer resolves, or because it imports a deleted class, switches to `ScriptedStrategy` through `register`. The known sites are listed in scout-backend section 2 ("Import an STF class directly" and "Use a code as a registry key").
-  2. Delete `test_hitnrun2_on_order_rejected_clears_open_direction` (`tests/engine_test/test_strategy_reject_delivery.py:126`), because it tested STF behaviour.
-  3. Rewrite `test_hitnrun2_signals_on_the_first_live_bar_after_481_stored_bars` (`test_strategy_warm_up.py:156`) as a scripted test of the same rule.
-  4. Fix the module path list in `tests/core_test/test_core_layout_contract.py:11`.
+  2. Fix the module path list in `tests/core_test/test_core_layout_contract.py:11`.
   5. In `tests/scripts/rubric/test_static_audit.py`, delete the STF parametrized tests and keep `test_unknown_strategy_falls_back_not_raises`.
   6. Leave tests that use a code only as an opaque string unchanged.
   Verify: G1.
@@ -497,7 +495,7 @@ Entry gate: the conventions gate, and D-2 recorded. Rollback: stop and delete th
 
 Entry gate: the conventions gate, and the Phase 12 subscription `running` for at least 24 h. Rollback: none. There is no backup by owner decision, so the document list is the only guard.
 
-- **T13.1 List (read-only).** Steps: run `.cache/stf_delete.py list` with `STF = ["hitnrun2","engulfing","engulfing_pullback30_touch"]`.
+- **T13.1 List (read-only).** Steps: run `.cache/stf_delete.py list` with `STF = ["engulfing","engulfing_pullback30_touch"]`.
   - `S` = subscription ids with `strategy_code ∈ STF`. Assert that no subscription in `S` is running and that the Phase 12 subscription id is not in `S`.
   - `R` = backtest run ids with `strategy_code ∈ STF`.
   - Print the counts and every `_id` for:
@@ -538,7 +536,7 @@ Entry gate: the conventions gate, and now at least `D-1 + 8 days`. Rollback: non
 
 | # | Criterion | Check |
 |---|---|---|
-| A1 | No STF code is left | `git grep -n -E "hitnrun2\|engulfing" -- src` prints 0 lines. The registry holds only `triple_screen`. |
+| A1 | No STF code is left | `git grep -n -E "engulfing" -- src` prints 0 lines. The registry holds only `triple_screen`. |
 | A2 | Spike recorded | `reports/spike-go-no-go.md` has S1-S9, each GO or NO-GO with evidence. |
 | A3 | Subscription contract | `intervals` and `parameters` are stored. `ix_subscriptions_dedup_intervals` exists in prod. Edit is refused while running or with exposure. |
 | A4 | No look-ahead in three paths | `tests/engine_test/test_htf_context.py` passes in CI: live, warm-up and backtest each give the previous bucket's close on every first entry bar of a bucket. A partial or non-final bucket is excluded. |

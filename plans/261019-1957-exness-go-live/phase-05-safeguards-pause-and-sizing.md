@@ -149,9 +149,8 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness
 
 ## Risk
 - Sizing leaks into paper or backtests (L/H). `leverage` defaults to 1.0 and only reconcile sets it for `exness`; the `leverage=1.0` test and existing suites pin it.
-- A gold stop wider than 25 USD/oz is still rejected `below_min_lot` (M/M); hitnrun2 allows stops up to 1% of entry, about 41.8 USD/oz (`hitnrun2_strategy_service.py:38,103`). Phase 11 measures paper stop distances per candidate; Phases 11 and 12 stop on any below-minimum line.
+- A gold stop wider than 25 USD/oz is still rejected `below_min_lot` (M/M). Phase 11 measures paper stop distances per candidate; Phases 11 and 12 stop on any below-minimum line.
 - Leverage sizing can meet a venue margin rejection; the daily cap ignores unrealized loss (M/L). Size stays ≤ `EXNESS_MAX_LOTS`.
-- While paused, hitnrun2 re-arms on rejection (`hitnrun2_strategy_service.py:130-132`) and re-signals each 1m bar while its condition holds: one REJECTED order and one WARNING per bar (bounded). Phase 11 records the count.
 - A store write fails on pause (L/M): the route returns 500 while the in-memory pause holds; retry the pause. A failed write on resume leaves the store paused, so a restart starts paused (the safe direction).
 - The pause survives a restart; strategy state does not (warmup, open direction). Planned restarts while live follow the "Restart while live" runbook (Phase 09 writes it).
 

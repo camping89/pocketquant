@@ -222,7 +222,7 @@ orphans orders=9 positions=0 trades=0
 open_positions_total=2 paper=running/running
 ```
 
-STF subscriptions: `019ebe98-209c-71f2-af3d-981810e2d783`, `019f0e9b-b206-76b6-b14f-23ab958c1c4e`, `01a15754-39ed-73e3-921e-df085eb4a786`, `01a15754-3ab5-7258-b46b-ad98e1f3471f`. Open positions: `01a18f20-98ce-7015-ba5a-80ac90f0ac3c` (BTCUSDT:BINANCE short) and `01a191c6-ff56-71a8-a2e8-143bac01f9c8` (BTCUSDT:BINANCE long). The 9 orphan orders are all `rejected` BTCUSDT:BINANCE orders from 2026-05-11 to 2026-06-28 whose `subscription_id` is a strategy code or an old backtest id (`hitnrun2`, `hitnrun2::bt::…`, `hit_and_run::bt::…`). Guard counts: tracked_symbols=6, sync_status=42, bars=5682095, job_history=86286.
+STF subscriptions: `019f0e9b-b206-76b6-b14f-23ab958c1c4e`, `01a15754-3ab5-7258-b46b-ad98e1f3471f`. Open positions: `01a18f20-98ce-7015-ba5a-80ac90f0ac3c` (BTCUSDT:BINANCE short) and `01a191c6-ff56-71a8-a2e8-143bac01f9c8` (BTCUSDT:BINANCE long). The 9 orphan orders are all `rejected` BTCUSDT:BINANCE orders from 2026-05-11 to 2026-06-28 whose `subscription_id` is a strategy code or an old backtest id. Guard counts: tracked_symbols=6, sync_status=42, bars=5682095, job_history=86286.
 
 Task 17.3 Verify PASS.
 

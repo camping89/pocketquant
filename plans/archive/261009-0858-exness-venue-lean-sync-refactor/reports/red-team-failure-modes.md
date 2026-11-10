@@ -8,9 +8,7 @@ This review produced 9 findings: 2 Critical, 6 High and 1 Medium. The full revie
    - The exception also kills the stream.
    - Fix: normalise the quantity before the order is created (broker `normalize_quantity` hook). Add an integration test running a clamped fill through adapter → OrderAppService → PositionAppService. Make `_notify` exception-safe.
 2. **Critical. Phase 07 T7.7.** Live subscriptions can be created and started without authentication (`strategy.py:69-70,113,122`; `verify_admin_token` is used only in `tracked_symbols.py`). This duplicates security finding 1.
-3. **High. Phase 07 T7.3/T7.4, Phase 08 T8.7.** Any Exness rejection leaves `hitnrun2._open_direction` set (`hitnrun2.py:94,102,110,115-125`), so the strategy goes silent until a restart.
-   - Fix: send a rejection callback to the strategy, or reset the direction. Add a test. Make T8.7 grep for rejections.
-4. **High. Phase 07 T7.4, Phase 06 T6.6.** Fills and closes missed during a WS outage, deploy or restart are never reconciled (`hitnrun2.py:65-70`, `strategy_app_service.py:144-145`, `deploy/vps/10-deploy.sh:50`).
+4. **High. Phase 07 T7.4, Phase 06 T6.6.** Fills and closes missed during a WS outage, deploy or restart are never reconciled (`strategy_app_service.py:144-145`, `deploy/vps/10-deploy.sh:50`).
    - Fix: reconcile against the snapshot in both directions, and register the close path in `_pending_ack`.
    - Block signals until the first snapshot arrives.
    - Gate every deploy on there being no open Exness position.

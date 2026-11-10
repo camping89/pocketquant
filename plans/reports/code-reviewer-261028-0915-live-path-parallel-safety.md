@@ -222,7 +222,7 @@ wait until the order call returns.
   correctness while the bar lock stops covering HTTP.
 
 **M3. Strategy state is not restored from the venue position after a restart or stop/start; an opposite entry becomes a close.** [F] for each step, [I] for the chain.
-- `on_start` clears `_open_direction` (`engulfing_strategy_service.py:74-79`, `hitnrun2_strategy_service.py:68-73`).
+- `on_start` clears `_open_direction` (`engulfing_strategy_service.py:74-79`).
 - The Exness position survives and is re-mapped from the snapshot.
 - An opposite-side order whose quantity equals the held units is treated as an exit (`exness_broker_adapter.py:205-214`).
 - Without `max_lots`, every order is clamped to the minimum lot (`exness_mappers.py:86-93`),

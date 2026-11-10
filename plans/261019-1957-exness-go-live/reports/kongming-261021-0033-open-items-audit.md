@@ -13,7 +13,7 @@ Nothing blocks Phases 02-07 from running tonight. Three decisions are worth maki
 **Q1. Single-order run: how hard a guarantee?** (planner concern a)
 
 - Fact `[F]`: the Task 11.9 step 0 watch pauses after the first position only while a worker runs (about 2 h); on `no_entry` the worker exits `NOT_YET` with entries on until the next run, up to 24 h later (`phase-11:210-223,237,314`).
-- Bound while unwatched `[F + I]`: with one `exness` subscription, `submit_order` opens only when that subscription holds no position (`exness_broker_adapter.py:199-203`), so trades are sequential and each needs its own SL/TP close first. The cap rejects an open once realized PnL for the UTC day is at or below -25 USD (`:262-264`), and sizing rejects stops above about 25 USD/oz (Phase 05 arithmetic). Worst case per UTC day is therefore about 50 USD (one trade that lands just above the cap, then one max-loss trade), and about 100 USD if an unwatched 24 h window straddles midnight UTC, plus gap slippage. Realistic exposure is far lower (hitnrun2 TP is at least 2 percent, so a winner takes time).
+- Bound while unwatched `[F + I]`: with one `exness` subscription, `submit_order` opens only when that subscription holds no position (`exness_broker_adapter.py:199-203`), so trades are sequential and each needs its own SL/TP close first. The cap rejects an open once realized PnL for the UTC day is at or below -25 USD (`:262-264`), and sizing rejects stops above about 25 USD/oz (Phase 05 arithmetic). Worst case per UTC day is therefore about 50 USD (one trade that lands just above the cap, then one max-loss trade), and about 100 USD if an unwatched 24 h window straddles midnight UTC, plus gap slippage. Realistic exposure is far lower.
 - Options:
   - A. Accept the bound (recommended). Zero code; the risk is already in `phase-11` Risk. Cheap tightening: raise the watch to 4 h (`TRIES=240`).
   - B. Re-pause at `no_entry`, then ask Resume [ASK] again at each re-run. Keeps U2 but gives only 2-4 h of entries per run day; go-live can take weeks if signals are rare. Not recommended.
@@ -36,7 +36,7 @@ Nothing blocks Phases 02-07 from running tonight. Three decisions are worth maki
 - Task 11.11 (AC6 void): `Recommended: accept` when only `clamped True`; `Recommended: stop` when `balance_deals > 0` (a deposit or withdrawal during the run needs an explanation first).
 - Task 12.4 (Friday with an open position): `Recommended: 2` (pause entries; the open position keeps its venue SL/TP; nothing new opens into the Sunday gap).
 - Task 12.6 (go-live): `Recommended: yes` when all five rows passed and no stop event; `Recommended: no` otherwise.
-- Task 11.3 strategy choice: already decided to be recommended from the preflight (likely hitnrun2 XAUUSD 1m by the tie rule); confirm the balance there (U1).
+- Task 11.3 strategy choice: already decided to be recommended from the preflight; confirm the balance there (U1).
 
 ## 2. Actions you can do now
 

@@ -12,14 +12,13 @@ Cần một cách **có hệ thống (rubric)** để đánh giá mọi backtest
 
 **DB (`backtest_runs`, prod VPS, read-only survey):**
 - **8 run total → 6 finished, 2 failed.** Tất cả 1 symbol `BTCUSDT:BINANCE`, 1 interval `1m`, cost model (slippage 0.5, commission 3.0).
-- 3 strategy: `engulfing` ×3, `hitnrun2` ×4, `engulfing_pullback30_touch` ×1.
-- **Duplicate**: `hitnrun2` `019f1780-546f` và `019f1780-6b52` metrics identical → double-persist race artifact. Rubric phải dedup.
+- 2 strategy: `engulfing` ×3, `engulfing_pullback30_touch` ×1.
 - `config_snapshot.parameters = {}` mọi run → params thật nằm trong code `_DEFAULTS`, không phải DB.
 - `equity_curve` lưu (trade-keyed realized, ~3.4k–4.5k điểm/run). Per-bar returns curve KHÔNG lưu.
 - Trade doc giàu: `entry_price, exit_price, sl_price, tp_price, quantity, pnl, commission, duration_seconds, direction` per-trade → **planned R:R tính trực tiếp từ DB** (không cần đọc _DEFAULTS).
 - Run doc có field top-level `verdict` sẵn → chỗ persist tự nhiên.
 
-**Finding chẩn đoán:** `hitnrun2` profit_factor **2.11** nhưng total_return **−3.1%** → gross-edge dương, cost nuốt sạch. Khác hẳn `engulfing` (pf 0.93, vô hướng thật). Rubric phải tách **gross-edge vs net-after-cost**.
+**Finding chẩn đoán:** `engulfing` (pf 0.93) vô hướng thật. Rubric phải tách **gross-edge vs net-after-cost**.
 
 **Codebase:**
 - `PerformanceCalculatorDomainService` (`core/domain/trading/`) — có total_return, cagr, sharpe, sortino, max_dd, win_rate, profit_factor, avg_win/loss, avg_duration, commission. Thiếu Calmar/MAR/Ulcer/tail/expectancy/PSR/cost-to-edge.
@@ -115,10 +114,9 @@ scripts/rubric/
 - **Persist**: field `verdict.rubric` trong `backtest_runs`, keyed `rubric_version`, idempotent upsert, `--persist` opt-in (mặc định `--dry-run`).
 
 ### Xử lý thực tế
-- Dedup hitnrun2 546f/6b52 (double-persist).
 - Params từ AST `_DEFAULTS`, không từ DB `{}`.
 - PSR/Sharpe trên trade-keyed returns (note caveat như code hiện có).
-- Tách gross-edge vs net-after-cost để phân biệt "cost giết" (hitnrun2) vs "vô hướng" (engulfing).
+- Tách gross-edge vs net-after-cost để phân biệt "cost giết" vs "vô hướng" (engulfing).
 
 ## Risks & mitigation
 - **Mô tả ≠ validate OOS.** 1 symbol/1 interval/no-sweep → rubric chẩn đoán sức khỏe run, KHÔNG dự báo tương lai. Ghi rõ trong output header.
@@ -138,7 +136,7 @@ DSR/PBO/CSCV implementation · multi-symbol · walk-forward tự động · opti
 
 ## Success metrics
 - Chạy 1 lệnh ra 4 artifact cho toàn bộ run, human đọc HTML hiểu ngay run nào khỏe/bệnh ở trục nào.
-- Rubric reproduce được chẩn đoán master-report (engulfing vô hướng; hitnrun2 cost-killed) — chứng minh rubric bắt đúng bệnh.
+- Rubric reproduce được chẩn đoán master-report (engulfing vô hướng) — chứng minh rubric bắt đúng bệnh.
 
 ## Sources (deep research)
 Metric formulas (authoritative):

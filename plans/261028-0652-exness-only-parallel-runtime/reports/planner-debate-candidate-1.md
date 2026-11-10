@@ -42,7 +42,7 @@ Labels: **[V]** I read it at the cited `file:line` on `develop` @ 453e8e90 today
 | H3 / D10 | CI: a non-successor bucket, or a bar with tick silence over 60 s of trading time, logs `reason=gap` and skips the entry. Prod: `strategy.entry_skipped` count reported per week. |
 | M1 / 1m latency | CI: with fresh caches the open path makes exactly 1 REST call (`openPosition`). Prod paper: `live.signal_latency` p95 of `t5_ms` ≤ 1,000 on 1m Exness symbols. Before re-arming live: D12 canary, first 20 live min-lot entries, p95 `t6_ms` ≤ 2,000. |
 | M2 / D21 | CI: two subscriptions signal on one bar; their check sections run one after the other and their `openPosition` calls overlap (bar lock not held). A close event marks the loss-cap cache stale; the next open re-reads synchronously or refuses. |
-| M3 / D9 / D11 | CI: after a restart with a LONG mirror row, the strategy's direction is LONG. An opposite entry is rejected and never becomes a close; `closePosition` no longer exists in `src/`. hitnrun2 can signal on the first live bar after a restart. |
+| M3 / D9 / D11 | CI: after a restart with a LONG mirror row, the strategy's direction is LONG. An opposite entry is rejected and never becomes a close; `closePosition` no longer exists in `src/`. |
 | D13 | CI: after takeover a paper broker's balance = initial balance + Σ `trades.pnl` of its subscriptions, and its open positions equal the mirror rows. |
 | Handover (D8) | Over 10 deploys in market hours, every `trader.lease_released` has `inflight=0` and a timestamp inside [B+0 s, B+30 s] of a 1m boundary B. `handover_gap_ms` ≤ 2,000; `takeover_ms` ≤ 5,000. 0 `reason=gap` skips on the first bar after a handover. A probe through nginx every 0.5 s during each deploy sees 0 non-200 answers. |
 | Rate budget (D19) | 0 terminal `exness.rate_limited` on `openPosition`. `exness.rate_limited_retry` ≤ 72 per 7 days. |
@@ -326,7 +326,7 @@ failure evidence to the user. Never continue by self-reasoning.
 
 **Entry gate:** Phase 05 on `develop`. Only this phase edits `engine/strategy/strategy_app_service.py`, `strategy_service_interface.py`, `paper_broker_adapter.py`, `position_app_service.py`, `trade_repository.py`, `di/services.py`.
 
-**Facts.** Signals are processed inline under the bar lock [V `strategy_app_service.py:241-270`, `bar_app_service.py:90-92,162`]. `on_start` clears `_open_direction` in all three strategies [V `hitnrun2_strategy_service.py:73`, `engulfing_pullback30_touch_strategy_service.py:93`, engulfing `:74-79`]. hitnrun2 buffers 481 bars [V `:36,60`]. The boot path deletes paper mirror rows [V `position_app_service.py:36-53`, `di/services.py:122-133`]. Paper balance resets [V `paper_broker_adapter.py:98`]. The backtest sandbox builds the same engine [V `backtest_sandbox_app_service.py:136-142`].
+**Facts.** Signals are processed inline under the bar lock [V `strategy_app_service.py:241-270`, `bar_app_service.py:90-92,162`]. `on_start` clears `_open_direction` in both strategies [V `engulfing_pullback30_touch_strategy_service.py:93`, engulfing `:74-79`]. The boot path deletes paper mirror rows [V `position_app_service.py:36-53`, `di/services.py:122-133`]. Paper balance resets [V `paper_broker_adapter.py:98`]. The backtest sandbox builds the same engine [V `backtest_sandbox_app_service.py:136-142`].
 
 ### Task 6.1 — Live-only dependencies
 - **Target:** `StrategyAppService.__init__` (`:42-66`); `di/services.py:137-161`.
@@ -347,7 +347,7 @@ failure evidence to the user. Never continue by self-reasoning.
 ### Task 6.4 — D9 warm-up and direction restore
 - **Target:** `strategy_service_interface.py:35-38` (add `self._open_direction = None` and `restore_direction(direction)`); `start_strategy` `:139-154`; new `take_over()` on `StrategyAppService`.
 - **Steps:** in `start_strategy`, after `on_start`: replay `bar_repository.find(symbol, interval, end_date=now, limit=500)` oldest first through `on_bar_completed`, discarding signals; then `restore_direction(LONG/SHORT/None)` from `position_app_service.get(id)`. Broker connect stays at `:149-150` but only when `trading_until` is in the future. `take_over()`: `await order_app_service.load_pending_orders()`, `await position_app_service.load_open_positions()` (replaces its dict; no paper delete), restore paper brokers (Task 6.5), `restore_direction` for every running strategy, connect brokers of running strategies.
-- **Tests to write:** `tests/engine_test/test_strategy_restart_restore.py`: a LONG mirror row → direction LONG after start; hitnrun2 with 481 stored bars returns a signal on the first live bar that fits its rule (assert `len(strategy._closes) == 481` before the bar, no signal when the buffer is short).
+- **Tests to write:** `tests/engine_test/test_strategy_restart_restore.py`: a LONG mirror row → direction LONG after start.
 - **Verify:** test file passes.
 
 ### Task 6.5 — D13 paper restore and boot-path move

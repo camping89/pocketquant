@@ -16,7 +16,7 @@ created: 2026-10-09
 
 ## Overview
 
-Exness becomes a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`). Binance, OKX, PaperBroker, `hitnrun2` and `engulfing` all stay. Before any Exness code lands, the market-data sync pipeline is refactored with Binance as the only provider: one declarative `SyncPolicy` per provider plus one shared runner replaces `sync_jobs.py`, `cascade_aggregator.py`, `integrity_jobs.py` and `sync_internals/`. `docs/code-standards.md` is then rewritten as the standard the code follows. MT5 is documented only. There is no MCP work and the deployment topology does not change.
+Exness becomes a third live venue behind the existing ports (`IDataProvider`, `IRealtimeQuoteProvider`, `IBroker`). Binance, OKX, PaperBroker and `engulfing` all stay. Before any Exness code lands, the market-data sync pipeline is refactored with Binance as the only provider: one declarative `SyncPolicy` per provider plus one shared runner replaces `sync_jobs.py`, `cascade_aggregator.py`, `integrity_jobs.py` and `sync_internals/`. `docs/code-standards.md` is then rewritten as the standard the code follows. MT5 is documented only. There is no MCP work and the deployment topology does not change.
 
 Data flow after the plan: tracked symbol `CODE:EXCHANGE` → `policy_for(symbol)` (`engine/market_data/sync_policy.py`) → shared runner (`sync_runner.py`) → `SyncService` (`sync_service.py`) → `IDataProvider` router → Binance or Exness adapter → `BarRepository`. Live: WS ticks → quote router → `QuoteAppService` → `BarAppService` → Redis/SSE. Orders: `StrategyAppService` → `BrokerFactory` → `ExnessBroker` → REST ACK → events WS fill → `OrderAppService.on_order_update` → `PositionAppService`.
 
@@ -52,7 +52,7 @@ Phases 01 and 02 share no files and may run in parallel. Every later phase is se
 
 - D1: `POST /api/v1/market-data/sync` with `{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000,"source":"bulk_sync_api"}` returns `status=completed` and `total_bars>=1000`. The bar SSE for `XAUUSD%3AEXNESS` emits `"is_in_progress": true` within 60 s during market hours, and the quote SSE emits that symbol.
 - D2: One minimum-lot live order per strategy reaches `filled` within 10 s of the ACK via the events WS, and appears in `GET /api/v1/trading/positions`.
-- D3: The `hitnrun2` and `engulfing` Exness backtests finish (`status=finished`) with `total_trades>0`. `PaperBroker` has a `spread` parameter.
+- D3: The `engulfing` Exness backtests finish (`status=finished`) with `total_trades>0`. `PaperBroker` has a `spread` parameter.
 - D4: `engine/market_data/sync_internals/` is gone, `app/di` holds 3 provider modules, market-data routes live in 2 files, and `scripts/code_metrics.py` reports a tiny share of 30% or less and 20 or fewer pure delegations (subject to the Phase 05 feasibility gate).
 - D5: `docs/code-standards.md` is rewritten and `uv run lint-imports` reports `Contracts: 3 kept, 0 broken.`
 - D6: The Binance and OKX tests pass with passed count ≥ the Phase 02 baseline, the test suite, ruff, pyright and lint-imports are green, and the CI deploy verdict shows `0 failures`.
@@ -1288,7 +1288,7 @@ dependencies: [8]
 
 ## Goal
 
-Prove G1 honestly. `PaperBroker` gains a constant `spread`. Exness M1/H1 history is backfilled. `hitnrun2` and `engulfing` backtests on Exness bars finish with trades (D3). One minimum-lot live round trip per strategy fills via the events WS and shows in `/trading/positions` (D2). One week including a weekend close shows no WS reconnect loops, no circuit-breaker trips and no FX weekend integrity false alarms.
+Prove G1 honestly. `PaperBroker` gains a constant `spread`. Exness M1/H1 history is backfilled. `engulfing` backtests on Exness bars finish with trades (D3). One minimum-lot live round trip per strategy fills via the events WS and shows in `/trading/positions` (D2). One week including a weekend close shows no WS reconnect loops, no circuit-breaker trips and no FX weekend integrity false alarms.
 
 ## Context Links
 
@@ -1333,16 +1333,16 @@ EOF
 - **Success criteria:** Every 1m count ≥ 40000 and every 1h count ≥ 4900.
 - **Verify:** All six printed counts meet those floors. Record them in `validation.md`.
 
-### T4: Exness backtests for both strategies (D3)
-- **Goal:** `hitnrun2` (1m) and `engulfing` (1h) finish on Exness bars with spread applied.
+### T4: Exness backtests for the strategy (D3)
+- **Goal:** `engulfing` (1h) finishes on Exness bars with spread applied.
 - **Target files and symbols:** `POST /api/v1/backtest/run`, `GET /api/v1/backtest/{run_id}`
 - **Steps:**
   1. Per instrument, `spread = median_spread` from the spike `summary.json`. `commission_bps = 0` unless the instrument's `commission_settings` in `conditions_*.json` is non-zero (then convert to bps and record the conversion in `validation.md`). `slippage_bps = 0`.
-  2. For each of the 3 instruments, submit `hitnrun2` on `1m` over the last 30 days and `engulfing` on `1h` over the last 180 days:
+  2. For each of the 3 instruments, submit `engulfing` on `1h` over the last 180 days:
      `curl -s -X POST http://localhost:41921/api/v1/backtest/run -H 'Content-Type: application/json' -d '{"strategy_id":"<code>","symbol":"<S>:EXNESS","interval":"<iv>","start_date":"<ISO>","end_date":"<ISO>","initial_capital":10000,"slippage_bps":0,"commission_bps":0,"spread":<median_spread>}'` (inside the container, same ssh pattern). Record each `request_id`.
   3. Poll `GET /api/v1/backtest/{run_id}` until `status` is not `started`.
-- **Success criteria:** All 6 runs are `finished`. For each strategy, at least one run has `metrics.total_trades > 0`.
-- **Verify:** For each run id, `curl -s http://localhost:41921/api/v1/backtest/<id> | python -c 'import json,sys; r=json.load(sys.stdin); print(r["status"], r["metrics"]["total_trades"])'` prints `finished <n>`, and per strategy max(n) > 0. Record a table in `validation.md`.
+- **Success criteria:** All 3 runs are `finished`. At least one run has `metrics.total_trades > 0`.
+- **Verify:** For each run id, `curl -s http://localhost:41921/api/v1/backtest/<id> | python -c 'import json,sys; r=json.load(sys.stdin); print(r["status"], r["metrics"]["total_trades"])'` prints `finished <n>`, and max(n) > 0. Record a table in `validation.md`.
 
 ### T5: Live preconditions (stop-and-ask)
 - **Goal:** Explicit user approval and risk caps before money moves.
@@ -1355,11 +1355,11 @@ EOF
 - **Verify:** `grep -cE "^(live_max_lots_equals_min|daily_cap_set|live_approved|no_deploy_with_open_position): yes$" plans/261009-0858-exness-venue-lean-sync-refactor/reports/validation.md` prints `4`.
 
 ### T6: Start one live subscription per strategy
-- **Goal:** Both strategies run on the Exness broker at minimum lot.
+- **Goal:** The strategy runs on the Exness broker at minimum lot.
 - **Target files and symbols:** `POST /api/v1/strategies/{strategy_code}/subscriptions`, `POST /api/v1/subscriptions/{sub_id}/start`
-- **Steps:** Inside the container (ssh pattern), create `{"symbol":"XAUUSD:EXNESS","interval":"1m","broker":"exness"}` for `hitnrun2` and `{"symbol":"XAUUSD:EXNESS","interval":"1h","broker":"exness"}` for `engulfing`. Record both `id`s and start each.
-- **Success criteria:** Both subscriptions return `"broker": "exness"` and start.
-- **Verify:** The create responses contain `"broker": "exness"`, and `curl -s http://localhost:41921/api/v1/subscriptions/` lists both ids.
+- **Steps:** Inside the container (ssh pattern), create `{"symbol":"XAUUSD:EXNESS","interval":"1h","broker":"exness"}` for `engulfing`. Record the `id` and start it.
+- **Success criteria:** The subscription returns `"broker": "exness"` and starts.
+- **Verify:** The create responses contain `"broker": "exness"`, and `curl -s http://localhost:41921/api/v1/subscriptions/` lists the id.
 
 ### T7: Verify the round trips (D2)
 - **Goal:** Each strategy's first live order fills within 10 s via the events WS, shows as a position, and closes at the venue SL/TP.

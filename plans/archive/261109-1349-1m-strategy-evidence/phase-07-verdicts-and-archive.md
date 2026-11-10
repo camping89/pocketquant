@@ -11,7 +11,7 @@ dependencies: [6]
 
 ## Goal
 
-One written `final:` line per set (three) with the backtest verdict and the paper record, a one-paragraph conclusion, the plan at `status: completed`, and the plan directory moved to `plans/archive/`.
+One written `final:` line per set (two) with the backtest verdict and the paper record, a one-paragraph conclusion, the plan at `status: completed`, and the plan directory moved to `plans/archive/`.
 
 ## Context
 
@@ -41,18 +41,18 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 
 ### Task 07.1 — Final verdict per set
 
-**Goal:** three `final:` lines and a summary table that a reader can act on.
+**Goal:** two `final:` lines and a summary table that a reader can act on.
 
 **Target files and symbols:** reports of Phases 02, 05, 06.
 
 **Steps:**
-1. For each set `ts-1m-5m-15m`, `ts-1m-15m-1h`, `hitnrun2-1m`, write `final: <set> <pass|fail> backtest=<the verdict line's run values> paper=<recorded|not_run> on_bar_error=<n|n/a> stale=<n|n/a>`, where `<pass|fail>` is copied from that set's `verdict:` line and the paper values from its `recon:` error line (`not_run` and `n/a` for a set that failed the gate).
+1. For each set `ts-1m-5m-15m`, `ts-1m-15m-1h`, write `final: <set> <pass|fail> backtest=<the verdict line's run values> paper=<recorded|not_run> on_bar_error=<n|n/a> stale=<n|n/a>`, where `<pass|fail>` is copied from that set's `verdict:` line and the paper values from its `recon:` error line (`not_run` and `n/a` for a set that failed the gate).
 2. A table `| set | runs (pf, trades, gate) | verdict | paper trades/day (bt vs paper) | avg commission (bt vs paper) | exit mix (bt vs paper) | errors/stale |` with one row per set, values copied from the reports.
 3. A conclusion of at most five sentences: which sets pass, the main number behind each fail, and, if none passed, the sentence "1m does not clear the gate (net profit_factor >= 1.2 and total_trades >= 100 over 12 months) on XAUUSD:EXNESS at the seeded costs." Facts only; label any inference as such.
 
-**Success criteria:** three `final:` lines whose pass/fail match the verdict lines.
+**Success criteria:** two `final:` lines whose pass/fail match the verdict lines.
 
-**Verify:** `uv run python -c "import re; r='plans/261109-1349-1m-strategy-evidence/reports/'; t=open(r+'phase-02-track-a-backtests.md',encoding='utf-8').read()+open(r+'phase-05-track-b-backtests.md',encoding='utf-8').read(); f=open(r+'phase-07-verdicts-and-archive.md',encoding='utf-8').read(); v=dict(re.findall(r'^verdict: (\S+) (pass|fail) ', t, re.M)); g=dict(re.findall(r'^final: (\S+) (pass|fail) ', f, re.M)); print('final_ok=' + str(len(v) == 3 and v == g))"` prints `final_ok=True`.
+**Verify:** `uv run python -c "import re; r='plans/261109-1349-1m-strategy-evidence/reports/'; t=open(r+'phase-02-track-a-backtests.md',encoding='utf-8').read(); f=open(r+'phase-07-verdicts-and-archive.md',encoding='utf-8').read(); v=dict(re.findall(r'^verdict: (\S+) (pass|fail) ', t, re.M)); g=dict(re.findall(r'^final: (\S+) (pass|fail) ', f, re.M)); print('final_ok=' + str(len(v) == 2 and v == g))"` prints `final_ok=True`.
 
 ### Task 07.2 — Status completed
 
@@ -89,7 +89,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261109-1349-1m-str
 
 ## Report
 
-`reports/phase-07-verdicts-and-archive.md`: entry-gate outputs; the three `final:` lines, the table and the conclusion; the `ak` outputs; then `Result: PASS` (written before the move, as Task 07.3 says).
+`reports/phase-07-verdicts-and-archive.md`: entry-gate outputs; the two `final:` lines, the table and the conclusion; the `ak` outputs; then `Result: PASS` (written before the move, as Task 07.3 says).
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.

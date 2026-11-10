@@ -34,7 +34,7 @@ Working dir: `D:/w/_me/algotrading/pocketquant` (git repo, branch `develop`, HEA
 
 ## Verifier corrections the plan must apply (from the report appendix)
 
-`stop_grace_period` ~120 s with lease TTL 30 s / renew 10 s; build and warm strategies in standby (hitnrun2 needs 481 1m bars); define the Redis-seed gap case using `last_update`; synchronous loss-cap fallback costs ~2 s on the first entry after a close (say so); heartbeat orphan sweep (D18); pause route returns an error when the store write fails; move `web` `depends_on` and the nginx upstream from `app` to `api`; second-trader test is the two-WS spike (D17); update the ES memory note when TV removal lands; `main.py:472-475` does not exist (quote feed at `main.py:65`, sweeps at `main_extensions.py:132-172`).
+`stop_grace_period` ~120 s with lease TTL 30 s / renew 10 s; build and warm strategies in standby; define the Redis-seed gap case using `last_update`; synchronous loss-cap fallback costs ~2 s on the first entry after a close (say so); heartbeat orphan sweep (D18); pause route returns an error when the store write fails; move `web` `depends_on` and the nginx upstream from `app` to `api`; second-trader test is the two-WS spike (D17); update the ES memory note when TV removal lands; `main.py:472-475` does not exist (quote feed at `main.py:65`, sweeps at `main_extensions.py:132-172`).
 
 ## Exness facts from the public OpenAPI spec (`.cache/exness-docs/exness_api.yaml`, downloaded 2026-10-28)
 

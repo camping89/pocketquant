@@ -59,7 +59,7 @@ CLI flags:
 - [ ] `--persist` → field `scorecard` xuất hiện trên 5 canonical + alias-ref trên duplicate; `verdict`/`metrics` nguyên vẹn; chạy 2 lần idempotent (không nhân đôi).
 - [ ] Per-run isolation: 1 run lỗi (vd bars thiếu) không abort batch; báo trong summary.
 - [ ] `ruff` + `pyright` clean toàn `scripts/rubric/`.
-- [ ] Artifact reproduce chẩn đoán master-report (engulfing no-edge; hitnrun2 cost-killed).
+- [ ] Artifact reproduce chẩn đoán master-report (engulfing no-edge).
 
 ## Risk Assessment
 

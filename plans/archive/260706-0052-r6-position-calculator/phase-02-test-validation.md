@@ -15,7 +15,6 @@ Cập nhật test tham chiếu trực tiếp symbol đổi tên; chạy full gat
 
 **Verify (không sửa — chỉ construct `RiskConfig`, không đụng symbol đổi tên)**
 - `tests/backtest_test/engine/test_engulfing_backtest.py` (`risk=RiskConfig(max_exposure_percent=…)`)
-- `tests/backtest_test/engine/test_hitnrun2_backtest.py` (`RiskConfig(max_exposure_percent=…)`, `max_exposure_percent=1.0`)
 - `tests/engine_test/test_reconcile_restart_resume_integration.py`, `tests/backtest_test/test_backtest_single_run_direct_task.py` (không ref trực tiếp — confirm)
 
 ## Implementation steps
@@ -44,7 +43,7 @@ git grep -n 'PositionSizerDomainService\|\.calculate_size(\|\.validate_size(\|Ri
 ### 3. Full validation
 
 ```bash
-just test                 # parity: engulfing/hitnrun2 số KHÔNG đổi
+just test                 # parity: engulfing số KHÔNG đổi
 uv run ruff check .
 uv run pyright
 uv run lint-imports       # 8 contract
@@ -62,13 +61,13 @@ uv run lint-imports       # 8 contract
 
 ## Success criteria
 
-- Toàn bộ suite pass; engulfing/hitnrun2 characterization number **không đổi** (bằng chứng logic percent-risk bảo toàn).
+- Toàn bộ suite pass; engulfing characterization number **không đổi** (bằng chứng logic percent-risk bảo toàn).
 - 4 gate xanh (`just test`, ruff, pyright, lint-imports).
 - Không circular import.
 
 ## Risk
 
-- Nếu `test_hitnrun2_backtest.py`/`test_engulfing_backtest.py` số đổi → không phải test lỗi mà là parity drift ở `calculate()`; fix service, không sửa số kỳ vọng.
+- Nếu `test_engulfing_backtest.py` số đổi → không phải test lỗi mà là parity drift ở `calculate()`; fix service, không sửa số kỳ vọng.
 
 ## Next
 

@@ -21,8 +21,6 @@ Khoá regression cho 2 fix + rename + grid-opt, chạy full gate, và re-smoke t
 
 | Test | Mục đích | File |
 |---|---|---|
-| Multi-trade backtest | `hitnrun2` ra > 1 trade sau khi wire fill | `tests/backtest_test/engine/test_hitnrun2_backtest.py` (mở rộng) |
-| on_order_filled reset | opposite-side fill → `_open_direction=None`; same-side giữ (đã có `test_on_fill_same_side_does_not_reset:201`) | `tests/core_test/unit/domain/strategy/test_hitnrun2.py` |
 | OrderFilledEvent route | `_on_order_filled` route đúng `subscription_id`; id lạ → no-op | new `tests/engine_test/test_order_filled_event_routing.py` |
 | Synthetic exit publish | `_fire_synthetic_exit` publish `OrderFilledEvent{sub_id, side}` | `tests/...paper_broker` test |
 | Sharpe annualization | `periods_per_year` keyword-only; known curve → known value (RED-TEAM: chưa có test nào) | new perf calc test |
@@ -51,7 +49,7 @@ Khoá regression cho 2 fix + rename + grid-opt, chạy full gate, và re-smoke t
 2. `just test` (full), `just lint`, `just types`.
 3. import-linter: `lint-imports` / theo pyproject (7 contracts) — rename không đổi layer, nhưng confirm.
 4. Whole-plan consistency sweep: re-read plan.md + 4 phase, reconcile thuật ngữ (on_fill→on_order_filled nhất quán mọi nơi).
-5. **Re-smoke qua remote-db (TỰ ĐỘNG cuối Phase 4, user chốt không hỏi lại):** backup `.env` (`cp .env .env.local-only.bak`), `cp pocketquant-config/local/remote-db.env .env` (code local → VPS Mongo/Redis, `ENABLE_JOBS=false`), `just be`, enqueue 1 backtest `hitnrun2` qua API, poll `/backtest/requests/{id}`, khẳng định `total_trades > 1` + Sharpe hợp lý. Cũng smoke grid-opt: 1 optimization nhỏ (2-3 combination) xác nhận mỗi combination ra trade. Khôi phục `.env` sau (`cp .env.local-only.bak .env`). ⚠ Writes đi vào **production** DB (deployment.md:347) — doc mới không xoá data cũ, có thể xoá sau khi xem.
+5. **Re-smoke qua remote-db (TỰ ĐỘNG cuối Phase 4, user chốt không hỏi lại):** backup `.env` (`cp .env .env.local-only.bak`), `cp pocketquant-config/local/remote-db.env .env` (code local → VPS Mongo/Redis, `ENABLE_JOBS=false`), `just be`, enqueue 1 backtest qua API, poll `/backtest/requests/{id}`, khẳng định `total_trades > 1` + Sharpe hợp lý. Cũng smoke grid-opt: 1 optimization nhỏ (2-3 combination) xác nhận mỗi combination ra trade. Khôi phục `.env` sau (`cp .env.local-only.bak .env`). ⚠ Writes đi vào **production** DB (deployment.md:347) — doc mới không xoá data cũ, có thể xoá sau khi xem.
 
 ## Success Criteria
 

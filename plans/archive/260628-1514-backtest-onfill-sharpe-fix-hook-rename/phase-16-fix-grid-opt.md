@@ -23,7 +23,7 @@ Grid optimization hiện **ra 0 trade** (pre-existing bug, phát hiện khi red-
 ## Concurrency hazard (verified — phải xử lý)
 
 - `EventBus` là **APP singleton** (`core.py`). `optimize()` chạy `max_workers` run **đồng thời** (`asyncio.gather`, default 4, max 16 — `optimization_config.py:38`).
-- `_on_bar_completed` match strategy theo **symbol/interval** (`strategy_app_service.py:280-282`), KHÔNG theo id. → nếu inject N strategy cùng `hitnrun2/BTCUSDT/1m` vào CÙNG `StrategyAppService`, mỗi `BarCompletedEvent` từ run A match TẤT CẢ N strategy + N broker → cross-talk.
+- `_on_bar_completed` match strategy theo **symbol/interval** (`strategy_app_service.py:280-282`), KHÔNG theo id. → nếu inject N strategy cùng strategy/BTCUSDT/1m vào CÙNG `StrategyAppService`, mỗi `BarCompletedEvent` từ run A match TẤT CẢ N strategy + N broker → cross-talk.
 - ✓ An toàn: `simulation_time` dùng `ContextVar` (`time/simulation.py:12`) — isolated per async task. `OrderFilledEvent` routing (Phase 2) theo id — an toàn. Vấn đề CHỈ ở bar dispatch.
 
 ## Design — per-run isolated EventBus + StrategyAppService

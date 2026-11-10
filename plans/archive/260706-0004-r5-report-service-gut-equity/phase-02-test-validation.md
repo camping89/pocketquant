@@ -4,7 +4,7 @@
 
 ## Overview
 
-Rework unit test cho collector (giờ cần broker cho `get_balance()`), chạy full validation. Bằng chứng parity = characterization tests engulfing/hitnrun2 pass KHÔNG sửa số.
+Rework unit test cho collector (giờ cần broker cho `get_balance()`), chạy full validation. Bằng chứng parity = characterization tests engulfing pass KHÔNG sửa số.
 
 ## Related code files
 
@@ -13,7 +13,6 @@ Rework unit test cho collector (giờ cần broker cho `get_balance()`), chạy 
 
 **Verify pass KHÔNG sửa (parity proof):**
 - `tests/backtest_test/engine/test_engulfing_backtest.py` (real BacktestAppService + PaperBrokerAdapter)
-- `tests/backtest_test/engine/test_hitnrun2_backtest.py`
 
 ## Implementation steps
 
@@ -56,22 +55,22 @@ class _FakeBroker:
 ## Validation (toàn bộ phải xanh)
 
 ```
-just test                 # 560 pass; engulfing/hitnrun2 số KHÔNG đổi
+just test                 # 560 pass; engulfing số KHÔNG đổi
 ruff check .
 pyright
 lint-imports              # 8 contract
 ```
 
-Nếu engulfing/hitnrun2 đổi số → Approach A sai đâu đó (broker read lệch shadow) → DỪNG, debug (không sửa expected number để pass).
+Nếu engulfing đổi số → Approach A sai đâu đó (broker read lệch shadow) → DỪNG, debug (không sửa expected number để pass).
 
 ## Todo
 - [x] `_FakeBroker` với `get_balance()`
 - [x] Rework `_round_trip` (script balance + `await finalize`)
 - [x] Rename import/class/docstring trong test
 - [x] Assert 3 invariant (MTM-isolation, Sharpe-from-MTM, cap ≤5000)
-- [x] `just test` xanh, engulfing/hitnrun2 số không đổi
+- [x] `just test` xanh, engulfing số không đổi
 - [x] ruff + pyright + lint-imports xanh
 
 ## Success criteria
-- Full suite xanh; characterization engulfing/hitnrun2 pass KHÔNG chỉnh expected.
+- Full suite xanh; characterization engulfing pass KHÔNG chỉnh expected.
 - Test isolation dùng fake broker, không phụ thuộc PaperBrokerAdapter thật.

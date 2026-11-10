@@ -29,14 +29,13 @@ Remaining (undone; each is a candidate, not an order):
 5. Phase 11 go-live never ran (D38): one strategy live, D12 canary (20 live entries, p95 `t0_t6_ms` ≤ 2000), D33 three live re-rolls, go-live Phase 12 observation, go-live declaration.
 6. Never exercised in prod: heavy-job resume after a worker handover cuts a running `sync_backfill` / `sync_integrity` / `sync_repair`.
 7. VPS helper gotcha left as is: `/opt/pocketquant/bin/leases.sh` and `deploy/vps/11-verify.sh` run `docker exec -i` and swallow the rest of a script piped into `ssh 'bash -s'`. Only plan text was fixed (`< /dev/null`).
-8. Paper subscription `hitnrun2 XAUUSD:EXNESS 1m` (id 01a15754-39ed-73e3-921e-df085eb4a786) is still running in prod; it would go with a strategy reset.
 
 Urgency: none. Live is off and entries are paused.
 
 ## Scope and guardrails
 
 - Workspace: `D:/w/_me/algotrading/pocketquant` (branch `develop`), config repo `D:/w/_me/algotrading/pocketquant-config`.
-- In scope: re-confirm items 1-8, report the confirmed state to the owner, then do only what the owner approves.
+- In scope: re-confirm items 1-7, report the confirmed state to the owner, then do only what the owner approves.
 - Out of scope: re-opening the closed plan; arming live trading; pushing `develop:master` without the owner's explicit yes.
 - Constraints (owner, standing):
   - Questions to the owner in Vietnamese; code, docs, plans, commits in English.
@@ -105,7 +104,7 @@ Not run:
 
 ## Exact next actions
 
-1. **First safe step** — read-only: re-confirm items 1-8 of Remaining. Run `git -C D:/w/_me/algotrading/pocketquant status --short`, `git log --oneline -5`, and `git rev-parse origin/master`. Over SSH (key setup in Source pointers), read container env `EXNESS_LIVE_TRADING` per role, trader safeguards, the subscription list, and the OOM check. Grep the code for the strip field (`web/src/components/strategies/exness-strip.tsx`) and the `BROKER_DISABLED` check (`src/pocketquant/engine/strategy/strategy_command_service.py`). Report the confirmed state per item to the owner (Vietnamese), marking any item that changed.
+1. **First safe step** — read-only: re-confirm items 1-7 of Remaining. Run `git -C D:/w/_me/algotrading/pocketquant status --short`, `git log --oneline -5`, and `git rev-parse origin/master`. Over SSH (key setup in Source pointers), read container env `EXNESS_LIVE_TRADING` per role, trader safeguards, the subscription list, and the OOM check. Grep the code for the strip field (`web/src/components/strategies/exness-strip.tsx`) and the `BROKER_DISABLED` check (`src/pocketquant/engine/strategy/strategy_command_service.py`). Report the confirmed state per item to the owner (Vietnamese), marking any item that changed.
 2. Ask the owner (Vietnamese, with a recommendation) which items to do and the strategy-reset scope.
 3. For a strategy reset that touches prod data: back up Mongo first, list what will be deleted (subscriptions and their orders, positions, trades, backtests), get an explicit yes, then delete. Never remove tracked symbols.
 4. For items 2 and 3 (code fixes): TDD per `docs/code-standards.md`; one `fix(...)` commit each; `develop` CI green; ask before `develop:master`.
