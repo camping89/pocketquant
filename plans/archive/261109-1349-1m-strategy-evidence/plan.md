@@ -1,7 +1,7 @@
 ---
 title: "1m strategy evidence: Triple Screen 1m entry and revived hitnrun2, backtest gate, paper reconcile"
 description: "Backtest Triple Screen with a 1m entry screen and a revived hitnrun2 with a cost filter on 12 months of XAUUSD:EXNESS, gate each set on net profit_factor >= 1.2 and total_trades >= 100, paper-reconcile passing sets for 14 days, and close with a verdict per set."
-status: in-progress
+status: completed
 priority: P2
 effort: "about 2d work + 14d paper window"
 branch: develop
