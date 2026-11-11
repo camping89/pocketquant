@@ -1,1 +1,3 @@
 - [No waiting, no fake data](feedback-no-waiting-no-fake-data.md) — owner replaces blocked waits with existing prod/test evidence via plan amendments; never synthetic prod docs
+- [Language and gates](user-language-and-gates.md) — questions in Vietnamese, reports English + VN summary; backtest decides, paper reconciles
+- [1m evidence direction](project-1m-evidence-direction.md) — 2026-11-09 next plan: Triple Screen 1m entry backtests, gate net PF>=1.2/100 trades; go-live parked
