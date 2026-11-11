@@ -39,3 +39,4 @@
 - [Gold window = round trip; timeframe edge](project_gold_window_round_trip_and_timeframe_edge.md) — 11-10: window +1.26% net (+39% then -30%), random-walk stats; trend rules die on 1m, survive 5m-1h; 15m,1h,4h stop PF 1.118
 - [Triple Screen canonical gap + old run costs](project_triple_screen_canonical_gap_and_old_run_costs.md) — 11-10: Phase 16 runs charged ~3 USD/oz; gold window a round trip; trigger/SL on entry bar not middle; sketch lead 1h/4h PF 1.48 untested
 - [Codebase deletion audit 2026-11-11](project_codebase_deletion_audit_2026_11_11.md) — report outside repo; /metrics route open + uncalled; health degraded unreachable; .venv reads blocked by hook
+- [Leveraged Triple Screen reanalysis](project_leveraged_triple_screen_reanalysis.md) — 11-11: 2% at 1:500 = +88% / -28% DD; edge t=1.28; margin never binds; advise 0.5-1% + 5x cap; no 15m gold before 2025-10-21; _can_afford refuses leveraged longs
