@@ -139,6 +139,8 @@ Sum R falls as the buffer grows. C sits at the edge of the grid, not on a platea
 1. Ship the engine and strategy changes (phase 5).
 2. The owner decides whether to paper-trade C as its first out-of-sample data (G6). Before that, I recommend charging swap in the backtest and computing the G3 trend adjustment, because the long side carries most of C's result.
 
-## Unresolved questions
+Outcome (2026-11-13):
 
-- Does the owner want C on paper now, or only after swap and trend adjustment are modelled?
+- The release is on master.
+- The owner chose paper for C now. Subscription `01a19bbf-0b3a-70e3-903e-f93e361acbf8` has run C's exact parameters on paper since 2026-11-12T17:25Z.
+- Swap in the backtest and the G3 trend adjustment are still open.

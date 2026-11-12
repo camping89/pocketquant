@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Ship"
-status: pending
+status: done
 priority: P3
 effort: "1h"
 dependencies: [4]
@@ -95,3 +95,16 @@ Spawn the `kongming` subagent for next-step counsel and pass:
 Apply kongming's guidance, then re-run the Verify step.
 If `kongming` cannot be spawned in this environment, STOP and report the same
 failure evidence to the user. Never continue by self-reasoning.
+
+## Results 2026-11-12/13
+- **5.1:** develop CI run 43258438498 concluded `success` on `3235e148`.
+- **5.2:** prod had 0 subscriptions with `parameters.stop_lookback`. All 3 Triple Screen subscriptions were paper and running.
+- **5.3:** the owner said yes to the release and yes to paper C.
+- **5.4:**
+  - master was fast-forwarded to `df5678db`; CI and deploy run 43260307408 concluded `success`.
+  - `11-verify.sh`: HEALTHY, 31 of 31 checks passed.
+  - All 3 subscriptions kept `running/running`.
+  - The prod load check, run `01a1d0c7-5025-74f5-8d6a-297897397c8c` (A's config, 1 year, `fill_interval=1m`), finished in about 2.7 minutes. During it the trader's lease age peaked at 9.8 s and the worker's at 10.0 s. Trader loop lag peaked at 0.014 s, and available memory stayed at or above 1133 MB.
+  - Deviation (kongming counsel): lease age was read from the trader and worker containers, because it is always null in the api container. The trip level was 20 s, not 30 s.
+- **5.5, deviation (owner decision):** a new subscription was blocked by the unique index on (strategy, symbol, intervals), because `01a19bbf-0b3a-70e3-903e-f93e361acbf8` already ran XAUUSD:EXNESS on `15m,1h,4h`. The owner chose to edit it into C. Steps: stop, close its open paper position, PATCH to C's exact parameters, start. It has run as C on paper since 2026-11-12T17:25Z. Its trades before that time belong to the old config.
+- **5.6:** `docs/system-architecture.md` line 26 states how backtests fill; the file is 60 lines.

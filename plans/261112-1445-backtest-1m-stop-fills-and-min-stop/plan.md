@@ -1,7 +1,7 @@
 ---
 title: "Backtest fills on 1m bars and Triple Screen stop and target parameters"
 description: "Backfill 1m gold bars through a local Mongo, make backtests replay 1m bars so stop entries, SL and TP fill in true order as in live paper, give Triple Screen higher-timeframe stop-loss and take-profit lookbacks, entry and stop offsets and a minimum stop, then run pre-registered configs and score them with the strategy assessment rubric at 2% risk."
-status: in-progress
+status: done
 priority: P2
 effort: 3d
 branch: develop
@@ -65,7 +65,7 @@ This plan is handover-ready: an executor model can run it without inventing a st
 | 2 | [Backtest replays 1m bars for fills](./phase-02-backtest-replays-1m-fills.md) | done | 1 |
 | 3 | [Triple Screen stop and target parameters](./phase-03-triple-screen-stop-and-target-parameters.md) | done | 2 |
 | 4 | [Re-run and rubric score](./phase-04-rerun-and-rubric-score.md) | done | 1, 2, 3 |
-| 5 | [Ship](./phase-05-ship.md) | pending | 4 |
+| 5 | [Ship](./phase-05-ship.md) | done | 4 |
 
 Phase 1 comes first because the Exness M1 history may be a rolling window. The first bar it serves could pass 2024-05-01 soon (this is an inference; `docs/deployment.md:217` gives only a bracket).
 
