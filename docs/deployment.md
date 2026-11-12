@@ -214,6 +214,8 @@ Refresh historical bars after a data-source change.
 
 Exness keeps limited history. A window older than that fails with an Exness error code, for example `REQUEST_INVALID_TIME_RANGE` (observed against the Exness API).
 
+For XAUUSD on 2026-11-12, Exness served M15 bars back to 2022-05-01, H1 to 2020-05-14 and H4 to 2020-11-09. It served M1 bars only from between 2024-04-15 and 2024-05-01; a request ending before that returned no candles and no error. Checked with `getCandleHistory` and `provider_bars.py` against the prod account.
+
 ### Sync gap repair
 
 Check for bar-data gaps when `job_history` shows `missed` events for `sync_backfill`. Check also when the latest `sync_integrity` run in `/monitor` lists details: each row is a (symbol, interval) with missing or misaligned bars, and the pill tooltip holds the gap ranges. A deploy that cuts the job leaves no gap, because the next worker resumes it ([System Architecture](system-architecture.md#decisions)). The schedule is in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.py`). The web `/monitor` page shows the same audit for all symbols.
