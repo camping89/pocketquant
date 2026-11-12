@@ -18,7 +18,7 @@ Measure the 1m fill, the minimum stop and candidate C with the engine. Score the
   - Window: 2024-05-01, or the first full 1m day from phase 1, to 2026-11-10 23:59 UTC. 1m fills on.
 - **A, frozen config:** `exit_mode=strategy`, `stoploss_lookback=20`.
 - **B:** A plus `min_stop_atr=0.5`.
-- **C, the walk-forward candidate** (kongming report, section 5.3): `stoploss_lookback=10`, `takeprofit_lookback=10`, `entry_offset_atr=0.1`, `stoploss_offset_atr=0.0`, `min_stop_atr=0.5`, `exit_mode=sl_tp`, `risk_reward=1.0`.
+- **C, the walk-forward candidate** (kongming report, section 5.3): `stoploss_lookback=10`, `takeprofit_lookback=10`, `entry_buffer_atr=0.1`, `stoploss_buffer_atr=0.0`, `min_stop_atr=0.5`, `exit_mode=sl_tp`, `risk_reward=1.0`.
 - **Trial count:** about 221 configurations so far. A, B and C were already counted in the sweep, so they add none.
 
 ## Tasks & Steps

@@ -40,7 +40,7 @@ created: 2026-11-12
   - Rejected: a lazy resolver inside the broker, which would add a second fill path that live never uses.
 - **Backfill:** run locally in remote-db mode (`README.md`, `just tunnel`), not on the 3.9 GB VPS. `scripts/backfill/provider_bars.py` holds every fetched bar in memory.
 - **Parameters:** the definitions in the kongming report, section 3.2, plus the owner's stop-loss offset (phase 3).
-- **Offsets as two parameters:** the owner wants X on both the entry and the stop loss. They are two parameters, `entry_offset_atr` and `stoploss_offset_atr`, so candidate C keeps its pre-registered values (entry offset 0.1, stop-loss offset 0). Any non-zero stop-loss offset is a new trial.
+- **Offsets as two parameters:** the owner wants X on both the entry and the stop loss. They are two parameters, `entry_buffer_atr` and `stoploss_buffer_atr`, so candidate C keeps its pre-registered values (entry offset 0.1, stop-loss offset 0). Any non-zero stop-loss offset is a new trial.
 
 ## Phases
 
@@ -59,7 +59,7 @@ created: 2026-11-12
 - **Fill order:** a stop whose fill bar touched the SL only before the entry is not stopped out. One whose SL was touched after the entry is. Without 1m coverage, the result equals today's rule.
 - **Unchanged trades:** a backtest whose window has no 1m bars, run with the old lookback converted (80 entry bars become `stoploss_lookback=20`), gives the same trades as stored run `01a1c41f`.
 - **Parameters:**
-  - Triple Screen has `stoploss_lookback` (default 2), `takeprofit_lookback`, `entry_offset_atr`, `stoploss_offset_atr` and `min_stop_atr`.
+  - Triple Screen has `stoploss_lookback` (default 2), `takeprofit_lookback`, `entry_buffer_atr`, `stoploss_buffer_atr` and `min_stop_atr`.
   - The new ones default to off; the float ones default to `0.0`.
   - `stop_lookback` is gone from the code, with no alias.
 - **Replica check:** the engine's trades for candidate C, on a window without 1m bars, match `.cache/km3/candidate_trades.csv`. Do this before reading any profit.

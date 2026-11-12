@@ -11,7 +11,7 @@ dependencies: []
 
 ## Goal
 - **Rename:** `stop_lookback` becomes `stoploss_lookback`, counted in bars of the next higher timeframe.
-- **Add:** `takeprofit_lookback`, `entry_offset_atr`, `stoploss_offset_atr` and `min_stop_atr`.
+- **Add:** `takeprofit_lookback`, `entry_buffer_atr`, `stoploss_buffer_atr` and `min_stop_atr`.
 - **Defaults:** the new parameters default to off.
 
 ## Facts (verified by kongming on 2026-11-12, report section 3)
@@ -29,8 +29,8 @@ dependencies: []
 
 | Step | Long | Short |
 |---|---|---|
-| 1. Entry, stop order | `high + entry_offset_atr x ATR` | `low - entry_offset_atr x ATR` |
-| 2. Swing stop | lowest low of the last `stoploss_lookback x ratio` closed entry bars, minus `stoploss_offset_atr x ATR` | highest high of those bars, plus `stoploss_offset_atr x ATR` |
+| 1. Entry, stop order | `high + entry_buffer_atr x ATR` | `low - entry_buffer_atr x ATR` |
+| 2. Swing stop | lowest low of the last `stoploss_lookback x ratio` closed entry bars, minus `stoploss_buffer_atr x ATR` | highest high of those bars, plus `stoploss_buffer_atr x ATR` |
 | 3. Minimum stop | `sl = min(step 2, entry - min_stop_atr x ATR)` | `sl = max(step 2, entry + min_stop_atr x ATR)` |
 | 4. Risk | `entry - sl` | `sl - entry` |
 | 5. TP, `exit_mode=sl_tp` only | `max(highest high of the last takeprofit_lookback x ratio entry bars, entry + risk_reward x risk)` | `min(lowest low of those bars, entry - risk_reward x risk)` |
@@ -47,7 +47,7 @@ dependencies: []
 
 ## Tasks & Steps
 1. **Rename.** Change `stop_lookback` to `stoploss_lookback` (default 2) and make it count middle-interval bars. Delete the old key; keep no alias.
-2. **New parameters.** Add `takeprofit_lookback` (default 0), and `entry_offset_atr`, `stoploss_offset_atr` and `min_stop_atr` (defaults `0.0`). Validate each as >= 0.
+2. **New parameters.** Add `takeprofit_lookback` (default 0), and `entry_buffer_atr`, `stoploss_buffer_atr` and `min_stop_atr` (defaults `0.0`). Validate each as >= 0.
 3. Implement the five steps above.
 4. **Stored subscriptions.** Count the subscriptions whose parameters hold `stop_lookback`, on prod and read-only. If the count is not 0:
    - back up `subscriptions` with `mongodump`;

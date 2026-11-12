@@ -7,7 +7,7 @@ metadata:
 
 Sweep of 2026-11-12 on the offline replica (`.cache/km3/`, gitignored scratch, may be gone; report `plans/reports/kongming-261112-1527-mtf-lookback-takeprofit-and-entry-offset.md`).
 
-- Owner asked for `stoploss_lookback` (rename of `stop_lookback`), `takeprofit_lookback`, both in middle-interval bars, and an entry offset X (long = level + X). Advised name: `entry_offset_atr`; X read as the stop-entry offset, not an SL buffer.
+- Owner asked for `stoploss_lookback` (rename of `stop_lookback`), `takeprofit_lookback`, both in middle-interval bars, and an entry offset X (long = level + X). Advised name: `entry_buffer_atr`; X read as the stop-entry offset, not an SL buffer.
 - `min_stop_atr` chosen by a non-profit rule (smallest multiple with at most 2% undecidable fill-bar trades): 0.5 x ATR(14, 4h). It cuts undecidable trades from 4.7% to 1.1% and the largest 2% position from 87x to 17.9x equity. 1.0 gives 9x.
 - Candidate: stoploss_lookback 10, takeprofit_lookback 10, entry offset 0.10 ATR, min stop 0.5 ATR, `exit_mode=sl_tp`, TP = farther of the swing level and 1 R. Walk-forward test folds 2024-01..2026-11: 570 trades, +0.148 R, t 2.77 (both fill bounds agree). Deflated Sharpe 0.71-0.88 at N = 219, so the trials gate fails. No single parameter passed its own fold test.
 - The swing TP is under 1 R on 68% of trades, so the 1 R floor sets most targets.
