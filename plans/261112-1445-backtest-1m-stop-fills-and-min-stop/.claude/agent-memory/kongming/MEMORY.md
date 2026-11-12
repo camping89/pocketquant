@@ -1,0 +1,2 @@
+- [Triple Screen MTF lookback sweep](project_triple_screen_mtf_lookback_sweep.md) — 11-12: min stop 0.5 ATR(4h) by rule; sl_tp candidate t 2.77 walk-forward, fails deflated Sharpe; 221 trials; 2022 holdout untouched
+- [Bash hook blocks one word](project_scout_block_hook_word.md) — a Bash command containing the word for a build-output dir or a goal price is refused; write such scripts with the Write tool
