@@ -17,4 +17,6 @@ Offline rescale of prod run `01a1c41f-dee3-7070-b7ac-086fbb5dacfc` (489 trades) 
 
 **Why:** owner asked for a 1:500 simulation with strategy-driven stops; advice given was 0.5% (max 1%) plus a 5x notional cap, and an out-of-sample test on imported gold history before live size.
 
-**How to apply:** if the owner returns with a leveraged engine plan or a risk-percent decision, start from these numbers; recheck Exness account terms (stop-out, swap, min lot) since they were search-snippet only. Related: [[project_gold_window_round_trip_and_timeframe_edge]], [[project_triple_screen_canonical_gap_and_old_run_costs]].
+**Superseded 2026-11-12:** these numbers describe the selection year only. Out of sample the config has no edge and the sizing advice is withdrawn ([[triple-screen-oos-diagnosis-and-rubric]]). The bar-coverage line above is stale: 15m gold now starts 2022-05-01.
+
+**How to apply:** if the owner returns with a leveraged engine plan or a risk-percent decision, start from the 2026-11-12 report, not from these numbers; recheck Exness account terms (stop-out, swap, min lot) since they were search-snippet only. Related: [[project_gold_window_round_trip_and_timeframe_edge]], [[project_triple_screen_canonical_gap_and_old_run_costs]].

@@ -15,4 +15,4 @@ Findings of the 2026-11-10 Triple Screen review (report `plans/reports/kongming-
 
 **Why:** the owner asked why a published strategy loses; later advice will be tempted to cite the old PF 0.78 figures or the "uptrend".
 
-**How to apply:** do not compare PF across runs without reading `config_snapshot` costs. Treat the 1h/4h lead as untested until an engine run on two pre-named sets and a second data span agree. See [[project_subscription_reset_before_new_strategy]].
+**How to apply:** do not compare PF across runs without reading `config_snapshot` costs. The 1h/4h lead is closed: on 2023-01..2025-11-08 the same sketch made -44 R (t -0.51), see [[triple-screen-oos-diagnosis-and-rubric]]. See [[project_subscription_reset_before_new_strategy]].
