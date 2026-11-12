@@ -23,6 +23,7 @@ This file holds the decisions, cross-process rules and limits that no single sou
 - Each process has its own in-memory EventBus. No event crosses processes. Processes share state only through Mongo and Redis.
 - Live quotes and in-progress bars pass through Redis. The trader writes them. The api's SSE routes poll Redis. The poll delay is acceptable because the shortest bar interval is one minute.
 - A backtest runs as a plain asyncio task in the api process. There is no queue and no concurrency cap. Runs share the Mongo pool. The worker marks a run `failed` when its heartbeat stops, so a killed api process leaves no run stuck at `started`.
+- A backtest fills stops and exits on 1m bars when the symbol has a 1m bar at or before the run's start, as live does. A bucket with no 1m bar falls back to the coarse fill rule. Without 1m coverage the run fills on the entry interval. The run snapshot's `fill_interval` records which one ran.
 - Paper positions live in broker memory. The trader that takes the lease rebuilds them from the open `positions` rows and the realized pnl in `trades`. A pending stop never outlives its strategy: stop, unload, edit and handover cancel it, the takeover cancels the stored pending stop of every loaded subscription, and the strategy re-places it on its next bar.
 - The startup and shutdown order lives in `app/main.py::lifespan` and `app/roles.py`. Each ordering rule is a comment at its line.
 
