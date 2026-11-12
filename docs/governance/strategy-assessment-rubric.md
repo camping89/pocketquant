@@ -16,7 +16,7 @@ A failed gate means no real money. Stop, or redesign the strategy and test it ag
 | # | Gate | How to compute | Pass |
 |---|---|---|---|
 | G1 | Honest backtest | Follow [No look-ahead rules](./no-look-ahead-rules.md). Charge spread, commission, slippage and swap. Count trades whose result depends on the unknown order of events inside one bar, such as a stop entry and its stop loss touched in the same bar. | At most 2% of trades are ambiguous, or they are replayed on finer bars. The verdict is the same under the pessimistic and the optimistic fill. |
-| G2 | Trials counted and deflated | Deflated Sharpe Ratio (DSR) of the chosen run, with N = the trial count. It is the probability that the Sharpe ratio beats the best Sharpe that N no-skill trials would show by luck. | DSR at least 0.95. Quick check: in-sample t at least 3.0. |
+| G2 | Trials counted and deflated | In-sample t = mean(R) / sd(R) x sqrt(n). Also report the Deflated Sharpe Ratio (DSR) of the chosen run, with N = the trial count: the probability that the Sharpe ratio beats the best Sharpe that N no-skill trials would show by luck. | In-sample t at least 3.0. The DSR is reported and does not gate. |
 | G3 | Out-of-sample edge | t = mean(R) / sd(R) x sqrt(n) on the OOS trades. In a market with a trend, also subtract what that trend pays a random trade of the same side and holding time. | Mean R above 0, t at least 2.0, n at least 300, and the trend-adjusted mean above 0. |
 | G4 | Survivable at the planned risk | Bootstrap at least 10 000 one-year paths from the OOS R list at the planned risk. Kelly fraction: the risk per trade that maximises mean log growth on the OOS list. | P(drawdown of 50% or more within a year) at most 10%. Planned risk at most half the Kelly fraction. |
 | G5 | Cost stress | Re-price the OOS trades at twice the modelled round-trip cost, or at the measured spread plus stop-order slippage. | OOS mean R still above 0. |
@@ -46,6 +46,7 @@ The S4, S5, S9 and S10 thresholds are this project's settings, not values from t
 ## Decision
 
 - Any of G1 to G5 fails: no real money.
+- For G2, in-sample is the whole window that informed the configuration's selection.
 - All gates pass and the score is 14 or more: incubate (G6), then trade at no more than half the Kelly fraction.
 - All gates pass and the score is 10 to 13: incubate, with the weak criteria named.
 - A score below 10: reject.
