@@ -50,12 +50,14 @@ class BacktestReportAppService:
         broker: IBrokerPort,
         calendar: ITradingCalendarPort,
         run_id: str,
+        fill_interval: str,
     ) -> None:
         self._config = config
         self._initial_capital = initial_capital
         self._broker = broker
         self._calendar = calendar
         self._run_id = run_id
+        self._fill_interval = fill_interval
 
         self._equity_curve: list[EquityPoint] = []
         # Per-bar mark-to-market curve (realized + unrealized), filled by
@@ -346,6 +348,7 @@ class BacktestReportAppService:
             "spread": self._config.spread,
             "parameters": self._config.parameters,
             "name": self._config.name,
+            "fill_interval": self._fill_interval,
         }
 
         run = BacktestResult(

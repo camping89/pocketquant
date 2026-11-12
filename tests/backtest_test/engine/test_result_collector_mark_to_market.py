@@ -110,6 +110,7 @@ async def _round_trip(with_mtm: bool) -> BacktestReportAppService:
         broker=broker,
         calendar=Continuous24x7Calendar(),
         run_id=_oid("run"),
+        fill_interval="15m",
     )
     set_simulation_time(_T0)
     await c.on_fill(_fill(OrderSide.BUY, 1.0, 100.0, "o1"))
@@ -176,6 +177,7 @@ async def test_persisted_equity_curve_capped() -> None:
         broker=broker,
         calendar=Continuous24x7Calendar(),
         run_id=_oid("run"),
+        fill_interval="15m",
     )
     base = 10_000.0
     # 20k MTM points — well over the 5000 cap.
@@ -193,6 +195,7 @@ async def test_persisted_curve_hard_capped_even_with_many_trade_points() -> None
         broker=broker,
         calendar=Continuous24x7Calendar(),
         run_id=_oid("run"),
+        fill_interval="15m",
     )
     set_simulation_time(_T0)
     # 8000 round-trips → 8000 trade-carrying equity points (over the cap).

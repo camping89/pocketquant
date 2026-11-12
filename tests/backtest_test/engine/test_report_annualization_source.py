@@ -48,6 +48,7 @@ async def _periods_passed_to_metrics(calendar, interval: str) -> float | None:
         broker=broker,
         calendar=calendar,
         run_id=str(uuid5(NAMESPACE_OID, "run-1")),
+        fill_interval=interval,
     )
 
     with patch(

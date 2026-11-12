@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_BARS
@@ -133,7 +133,7 @@ class BarRepository(SymbolScopedRepository):
         interval: Interval,
         start_datetime: datetime,
         end_datetime: datetime,
-    ) -> AsyncIterator[Bar]:
+    ) -> AsyncGenerator[Bar]:
         collection = self._collection()
 
         query = {
@@ -142,7 +142,7 @@ class BarRepository(SymbolScopedRepository):
             "datetime": {"$gte": start_datetime, "$lte": end_datetime},
         }
 
-        cursor = collection.find(query).sort("datetime", 1)
+        cursor = collection.find(query).sort("datetime", 1).batch_size(1000)
 
         try:
             async for doc in cursor:

@@ -1,14 +1,17 @@
 import asyncio
-from datetime import UTC, datetime
+from contextlib import aclosing
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 
 import structlog
 
+from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.logging import BACKTEST_RUN_ID, get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
+from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
@@ -66,12 +69,23 @@ class BacktestAppService:
             end_date=config.end_date.isoformat(),
         )
 
+        entry = config.intervals[0]
+        one_minute = Interval("1m")
+        merged = entry != one_minute.value and bool(
+            await self._bar_repo.find(
+                config.symbol, one_minute, end_date=config.start_date, limit=1
+            )
+        )
+        fill_interval = one_minute.value if merged else entry
+        finest_s = INTERVAL_SECONDS[fill_interval]
+
         collector = BacktestReportAppService(
             config,
             config.initial_capital,
             broker=self._broker,
             calendar=self._calendar,
             run_id=run_id,
+            fill_interval=fill_interval,
         )
 
         # Mark-to-market per bar for an evenly-sampled equity curve (Sharpe
@@ -79,7 +93,7 @@ class BacktestAppService:
         # (subscribed in broker.connect during strategy injection), so the equity
         # snapshot is taken once the bar's SL/TP exits have settled.
         async def _mtm_on_bar(event: BarCompletedEvent) -> None:
-            if event.bar_start is None:
+            if event.bar_start is None or event.interval != entry:
                 return
             balance = await self._broker.get_balance()
             collector.mark_to_market(event.bar_start, balance.total_equity)
@@ -97,33 +111,72 @@ class BacktestAppService:
 
             replay_started = perf_counter()
             bars_processed = 0
+
+            async def _publish(bar: Bar, interval: str) -> None:
+                nonlocal bars_processed
+                assert bar.datetime is not None
+                clock = bar.datetime + timedelta(seconds=INTERVAL_SECONDS[interval] - finest_s)
+                self._broker.set_current_price(config.symbol, bar.close)
+                set_simulation_time(clock)
+                await self._event_bus.publish(
+                    BarCompletedEvent(
+                        symbol=bar.symbol,
+                        interval=interval,
+                        bar_start=bar.datetime,
+                        open=bar.open,
+                        high=bar.high,
+                        low=bar.low,
+                        close=bar.close,
+                        volume=bar.volume,
+                        # Sim time, so the broker's same-bar rule compares like with like.
+                        occurred_at=clock,
+                    )
+                )
+                bars_processed += 1
+                if bars_processed % _YIELD_EVERY == 0:
+                    await asyncio.sleep(0)
+
             with structlog.contextvars.bound_contextvars(**{BACKTEST_RUN_ID: run_id}):
                 # ``stream`` is end-inclusive (``$lte end``), so a minute-precise
                 # end keeps the bar at that exact minute and excludes later bars.
-                async for bar in self._bar_repo.stream(
-                    config.symbol, Interval(config.intervals[0]), config.start_date, config.end_date
-                ):
-                    self._broker.set_current_price(config.symbol, bar.close)
-                    if bar.datetime is None:
-                        continue
-                    set_simulation_time(bar.datetime)
-                    await self._event_bus.publish(
-                        BarCompletedEvent(
-                            symbol=bar.symbol,
-                            interval=config.intervals[0],
-                            bar_start=bar.datetime,
-                            open=bar.open,
-                            high=bar.high,
-                            low=bar.low,
-                            close=bar.close,
-                            volume=bar.volume,
-                            # Sim time, so the broker's same-bar rule compares like with like.
-                            occurred_at=bar.datetime,
-                        )
+                entries = self._bar_repo.stream(
+                    config.symbol, Interval(entry), config.start_date, config.end_date
+                )
+                if not merged:
+                    async for bar in entries:
+                        if bar.datetime is not None:
+                            await _publish(bar, entry)
+                else:
+                    # The paper broker fills and exits only on the finest interval it has seen,
+                    # as live paper does on 1m bars. Each bar's clock is its end minus one
+                    # minute, so an entry bar is stamped after its own 1m bars: a stop placed on
+                    # it rests until the next 1m bar, never one inside the signal bucket. A
+                    # bucket with no 1m bar gets a stand-in 1m event with the entry bar's
+                    # OHLCV, so the coarse rule fills and exits there.
+                    step = timedelta(seconds=INTERVAL_SECONDS[entry])
+                    ones_stream = self._bar_repo.stream(
+                        config.symbol, one_minute, config.start_date, config.end_date
                     )
-                    bars_processed += 1
-                    if bars_processed % _YIELD_EVERY == 0:
-                        await asyncio.sleep(0)
+                    async with aclosing(ones_stream) as ones:
+                        pending = await anext(ones, None)
+                        async for bar in entries:
+                            if bar.datetime is None:
+                                continue
+                            inside = False
+                            while (
+                                pending is not None
+                                and pending.datetime is not None
+                                and pending.datetime < bar.datetime + step
+                            ):
+                                inside = inside or pending.datetime >= bar.datetime
+                                await _publish(pending, one_minute.value)
+                                pending = await anext(ones, None)
+                            if not inside:
+                                await _publish(bar, one_minute.value)
+                            await _publish(bar, entry)
+                        while pending is not None and pending.datetime is not None:
+                            await _publish(pending, one_minute.value)
+                            pending = await anext(ones, None)
 
             completed_at = datetime.now(UTC)
 
